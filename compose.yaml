@@ -1,0 +1,12 @@
+services:
+  app:
+    image: node:20-slim
+    volumes:
+      - .:/app
+    # ここが重要：作業場所を frontend フォルダの中に指定します
+    working_dir: /app/frontend
+    ports:
+      - "3000:3000"
+    # 起動コマンド：frontend 内のライブラリを使って起動させます
+    command: npm run dev
+    tty: true
