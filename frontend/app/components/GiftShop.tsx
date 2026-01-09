@@ -1,4 +1,3 @@
-"use client";
 import { Gift, Star, Shield } from 'lucide-react';
 import { Button } from './ui/button';
 import { motion } from 'framer-motion';

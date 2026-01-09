@@ -1,42 +1,27 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { PointsDisplay } from './components/PointsDisplay';
-import { GiftShop } from './components/GiftShop';
 import { EngiMeter } from './components/EngiMeter';
-import { AnonymousTimeline } from './components/AnonymousTimeline';
 import { UserProfile } from './components/UserProfile';
 import { type GiftRecord, type SentGiftRecord } from './components/GiftRecordForm';
 import { GiftRecordList } from './components/GiftRecordList';
 import { UnifiedRecordForm } from './components/UnifiedRecordForm';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Toaster } from './components/ui/sonner';
-import { Gift, Globe, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
-interface GiftItem {
-  id: string;
-  name: string;
-  description: string;
-  points: number;
-  emoji: string;
-  type: 'charm' | 'title';
-}
-
 export default function App() {
-  const [totalPoints, setTotalPoints] = useState(0);
   const [engiLevel, setEngiLevel] = useState(0);
-  const [ownedItems, setOwnedItems] = useState<string[]>([]);
   const [currentTitle, setCurrentTitle] = useState<string>('');
   const [receivedGifts, setReceivedGifts] = useState<GiftRecord[]>([]);
   const [sentGifts, setSentGifts] = useState<SentGiftRecord[]>([]);
 
-  // Calculate Engi level based on gifts (sent gifts contribute more)
+  // Calculate level based on gifts (sent gifts contribute more)
   useEffect(() => {
     const receivedContribution = receivedGifts.length * 5;
     const sentContribution = sentGifts.length * 10;
     const returnedContribution = receivedGifts.filter(r => r.returned).length * 3;
-    const newLevel = Math.min(100, receivedContribution + sentContribution + returnedContribution);
+    const receivedReturnForSentContribution = sentGifts.filter(s => s.returned).length * 5;
+    const newLevel = Math.min(100, receivedContribution + sentContribution + returnedContribution + receivedReturnForSentContribution);
     setEngiLevel(newLevel);
   }, [receivedGifts, sentGifts]);
 
@@ -44,23 +29,25 @@ export default function App() {
   useEffect(() => {
     const totalRecords = receivedGifts.length + sentGifts.length;
     const returnedCount = receivedGifts.filter(r => r.returned).length;
+    const receivedReturnForSentCount = sentGifts.filter(s => s.returned).length;
+    const totalReturnedCount = returnedCount + receivedReturnForSentCount;
     
-    if (totalRecords >= 100 || returnedCount >= 20) {
-      setCurrentTitle('感謝の聖者');
-    } else if (totalRecords >= 50 || returnedCount >= 10) {
+    if (totalRecords >= 100 || totalReturnedCount >= 20) {
+      setCurrentTitle('贈答の聖者');
+    } else if (totalRecords >= 50 || totalReturnedCount >= 10) {
       setCurrentTitle('福徳の守護者');
-    } else if (totalRecords >= 30 || returnedCount >= 5) {
-      setCurrentTitle('光の伝道師');
+    } else if (totalRecords >= 30 || totalReturnedCount >= 5) {
+      setCurrentTitle('交流の達人');
     } else if (totalRecords >= 20) {
-      setCurrentTitle('感謝の達人');
+      setCurrentTitle('贈答の実践者');
     } else if (totalRecords >= 10) {
-      setCurrentTitle('感謝の実践者');
+      setCurrentTitle('心遣いの人');
     } else if (totalRecords >= 5) {
-      setCurrentTitle('感謝の初心者');
+      setCurrentTitle('記録の初心者');
     } else {
       setCurrentTitle('');
     }
-  }, [receivedGifts.length, sentGifts.length, receivedGifts]);
+  }, [receivedGifts.length, sentGifts.length, receivedGifts, sentGifts]);
 
   const handleAddReceivedGift = (record: Omit<GiftRecord, 'id' | 'returned'>) => {
     const newRecord: GiftRecord = {
@@ -68,9 +55,8 @@ export default function App() {
       ...record,
     };
     setReceivedGifts([newRecord, ...receivedGifts]);
-    setTotalPoints(totalPoints + 10);
     toast.success('贈り物を記録しました', {
-      description: `${record.fromWhom}さんから${record.itemName} (+10pt)`,
+      description: `${record.fromWhom}さんから${record.itemName}`,
     });
   };
 
@@ -80,17 +66,9 @@ export default function App() {
       ...record,
     };
     setSentGifts([newRecord, ...sentGifts]);
-    setTotalPoints(totalPoints + 15);
     toast.success('贈り物を記録しました', {
-      description: `${record.fromWhom}さんへ${record.itemName} (+15pt)`,
+      description: `${record.fromWhom}さんへ${record.itemName}`,
     });
-  };
-
-  const handleRedeemGift = (gift: GiftItem) => {
-    if (totalPoints >= gift.points && !ownedItems.includes(gift.id)) {
-      setTotalPoints(totalPoints - gift.points);
-      setOwnedItems([...ownedItems, gift.id]);
-    }
   };
 
   const handleReturnGift = (
@@ -117,6 +95,30 @@ export default function App() {
     });
   };
 
+  const handleReturnReceivedForSentGift = (
+    recordId: string,
+    returnData: {
+      date: string;
+      itemName: string;
+      amount: number;
+      notes?: string;
+    }
+  ) => {
+    setSentGifts(
+      sentGifts.map((record) =>
+        record.id === recordId
+          ? {
+              ...record,
+              returned: returnData,
+            }
+          : record
+      )
+    );
+    toast.success('お返しを受け取ったことを記録しました', {
+      description: `${returnData.itemName}を受け取り`,
+    });
+  };
+
   const handleDeleteReceivedGift = (recordId: string) => {
     setReceivedGifts(receivedGifts.filter((record) => record.id !== recordId));
     toast.success('記録を削除しました');
@@ -127,10 +129,7 @@ export default function App() {
     toast.success('記録を削除しました');
   };
 
-  // Get owned charms only
-  const ownedCharms = ownedItems.filter(id => id.startsWith('charm-'));
-
-  // Dynamic background glow based on engi level
+  // Dynamic background glow based on level
   const getBackgroundStyle = () => {
     if (engiLevel >= 80) {
       return 'bg-gradient-to-br from-yellow-100 via-amber-100 to-orange-100';
@@ -139,18 +138,18 @@ export default function App() {
     } else if (engiLevel >= 40) {
       return 'bg-gradient-to-br from-rose-50 via-amber-50 to-orange-50';
     } else {
-      return 'bg-gradient-to-br from-rose-50 via-amber-50 to-orange-50';
+      return 'bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50';
     }
   };
 
   return (
     <div className={`min-h-screen transition-colors duration-1000 ${getBackgroundStyle()}`}>
-      {/* Golden particle effect overlay */}
-      {engiLevel > 60 && (
+      {/* Golden particle effect overlay for high levels */}
+      {engiLevel >= 80 && (
         <motion.div
           className="fixed inset-0 pointer-events-none"
           initial={{ opacity: 0 }}
-          animate={{ opacity: (engiLevel - 60) / 40 * 0.3 }}
+          animate={{ opacity: 0.3 }}
           transition={{ duration: 1 }}
         >
           <div className="absolute inset-0 bg-gradient-to-br from-yellow-200/20 via-transparent to-amber-200/20" />
@@ -178,85 +177,52 @@ export default function App() {
       )}
 
       <Toaster position="top-center" />
-      <div className="container mx-auto px-4 py-8 max-w-6xl relative">
+      <div className="container mx-auto px-4 py-8 max-w-4xl relative">
         {/* Header */}
-        <header className="text-center mb-8">
-          <motion.h1
-            className="text-4xl font-bold bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 bg-clip-text text-transparent mb-2"
-            animate={{
-              backgroundPosition: engiLevel > 80 ? ['0%', '100%', '0%'] : '0%',
-            }}
-            transition={{ duration: 3, repeat: engiLevel > 80 ? Infinity : 0 }}
+        <header className="mb-8">
+          <motion.div
+            className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-lg border border-rose-100"
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
           >
-            感謝ノート
-          </motion.h1>
-          <p className="text-gray-600">贈答の記録で縁起を高めましょう</p>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 bg-clip-text text-transparent mb-1">
+              贈答記録帳
+            </h1>
+            <p className="text-sm text-gray-600">いただいた贈り物と、お渡しした贈り物を記録</p>
+          </motion.div>
         </header>
 
         {/* User Profile */}
         <div className="mb-6">
           <UserProfile 
             currentTitle={currentTitle}
-            ownedCharms={ownedCharms}
             engiLevel={engiLevel}
           />
         </div>
 
-        {/* Engi Meter & Points Display */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        {/* Level Meter */}
+        <div className="mb-8">
           <EngiMeter level={engiLevel} />
-          <PointsDisplay points={totalPoints} />
         </div>
 
         {/* Main Content */}
-        <Tabs defaultValue="records" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-6 bg-white shadow-md">
-            <TabsTrigger value="records" className="flex items-center gap-2">
-              <Gift className="size-4" />
-              贈答記録
-            </TabsTrigger>
-            <TabsTrigger value="timeline" className="flex items-center gap-2">
-              <Globe className="size-4" />
-              みんなの贈答
-            </TabsTrigger>
-            <TabsTrigger value="gifts" className="flex items-center gap-2">
-              <Sparkles className="size-4" />
-              お守りショップ
-            </TabsTrigger>
-          </TabsList>
+        <div className="space-y-6">
+          {/* Unified Form */}
+          <UnifiedRecordForm 
+            onSubmitReceived={handleAddReceivedGift}
+            onSubmitSent={handleAddSentGift}
+          />
 
-          <TabsContent value="records" className="space-y-6">
-            {/* Unified Form */}
-            <UnifiedRecordForm 
-              onSubmitReceived={handleAddReceivedGift}
-              onSubmitSent={handleAddSentGift}
-            />
-
-            {/* Gift Management Section */}
-            <GiftRecordList
-              receivedRecords={receivedGifts}
-              sentRecords={sentGifts}
-              onReturn={handleReturnGift}
-              onDeleteReceived={handleDeleteReceivedGift}
-              onDeleteSent={handleDeleteSentGift}
-            />
-          </TabsContent>
-
-          <TabsContent value="timeline">
-            <AnonymousTimeline 
-              receivedRecords={receivedGifts}
-              sentRecords={sentGifts}
-            />
-          </TabsContent>
-
-          <TabsContent value="gifts">
-            <GiftShop 
-              currentPoints={totalPoints} 
-              onRedeem={handleRedeemGift}
-              ownedItems={ownedItems}
-            />
-          </TabsContent>
-        </Tabs>
+          {/* Gift Management Section */}
+          <GiftRecordList
+            receivedRecords={receivedGifts}
+            sentRecords={sentGifts}
+            onReturn={handleReturnGift}
+            onReturnReceivedForSent={handleReturnReceivedForSentGift}
+            onDeleteReceived={handleDeleteReceivedGift}
+            onDeleteSent={handleDeleteSentGift}
+          />
+        </div>
       </div>
     </div>
   );

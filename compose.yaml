@@ -1,12 +1,14 @@
 services:
   app:
-    image: node:20-slim
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     volumes:
-      - .:/app
-    # ここが重要：作業場所を frontend フォルダの中に指定します
-    working_dir: /app/frontend
+      - ./frontend:/app
+      - /app/node_modules  # ローカルの壊れたnode_modulesを持ち込まない
     ports:
       - "3000:3000"
-    # 起動コマンド：frontend 内のライブラリを使って起動させます
+    environment:
+      - NODE_ENV=development
+    # npm error Missing script: "dev" を防ぐため直接指定
     command: npm run dev
-    tty: true

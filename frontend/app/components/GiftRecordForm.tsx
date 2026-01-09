@@ -1,4 +1,3 @@
-"use client";
 import { useState } from 'react';
 import { Gift, Plus } from 'lucide-react';
 import { Button } from './ui/button';
@@ -40,6 +39,12 @@ export interface SentGiftRecord {
   amount: number;
   isMonetary: boolean;
   notes?: string;
+  returned?: {
+    date: string;
+    itemName: string;
+    amount: number;
+    notes?: string;
+  };
 }
 
 interface GiftRecordFormProps {
@@ -154,7 +159,7 @@ export function GiftRecordForm({ onSubmit }: GiftRecordFormProps) {
               value={formData.category}
               onValueChange={(value) => setFormData({ ...formData, category: value })}
             >
-              <SelectTrigger className="border-blue-200">
+              <SelectTrigger className="border-blue-200 bg-white">
                 <SelectValue placeholder="選択してください" />
               </SelectTrigger>
               <SelectContent>

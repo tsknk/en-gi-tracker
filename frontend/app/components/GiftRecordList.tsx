@@ -1,7 +1,6 @@
-"use client";
 import { Gift, Calendar, User, Tag, DollarSign, ArrowRight, Trash2, SendHorizontal } from 'lucide-react';
 import { Button } from './ui/button';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import type { GiftRecord, SentGiftRecord } from './GiftRecordForm';
 import { ReturnGiftForm } from './ReturnGiftForm';
 
@@ -9,11 +8,12 @@ interface GiftRecordListProps {
   receivedRecords: GiftRecord[];
   sentRecords: SentGiftRecord[];
   onReturn: (recordId: string, returnData: { date: string; itemName: string; amount: number; notes?: string }) => void;
+  onReturnReceivedForSent?: (recordId: string, returnData: { date: string; itemName: string; amount: number; notes?: string }) => void;
   onDeleteReceived: (recordId: string) => void;
   onDeleteSent: (recordId: string) => void;
 }
 
-export function GiftRecordList({ receivedRecords, sentRecords, onReturn, onDeleteReceived, onDeleteSent }: GiftRecordListProps) {
+export function GiftRecordList({ receivedRecords, sentRecords, onReturn, onReturnReceivedForSent, onDeleteReceived, onDeleteSent }: GiftRecordListProps) {
   if (receivedRecords.length === 0 && sentRecords.length === 0) {
     return (
       <div className="text-center py-12 bg-gradient-to-br from-blue-50 to-purple-50 rounded-2xl border-2 border-dashed border-blue-200">
@@ -122,7 +122,7 @@ export function GiftRecordList({ receivedRecords, sentRecords, onReturn, onDelet
                 animate={{ x: 0, opacity: 1 }}
                 transition={{ delay: index * 0.05 }}
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
                       <User className="size-4 text-blue-500" />
@@ -159,6 +159,28 @@ export function GiftRecordList({ receivedRecords, sentRecords, onReturn, onDelet
                     <Trash2 className="size-4" />
                   </Button>
                 </div>
+
+                {/* Return Received Status */}
+                {onReturnReceivedForSent && (
+                  record.returned ? (
+                    <div className="mt-3 pt-3 border-t border-blue-200">
+                      <div className="flex items-center gap-2 text-green-700 mb-2">
+                        <ArrowRight className="size-4 rotate-180" />
+                        <span className="text-sm font-semibold">お返しを受け取り済み</span>
+                      </div>
+                      <div className="ml-6 text-sm text-gray-600">
+                        <p>日付: {record.returned.date}</p>
+                        <p>品物: {record.returned.itemName}</p>
+                        {record.returned.amount > 0 && <p>金額: ¥{record.returned.amount.toLocaleString()}</p>}
+                        {record.returned.notes && <p className="text-xs text-gray-500 mt-1">💬 {record.returned.notes}</p>}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-3 pt-3 border-t border-blue-200">
+                      <ReturnGiftForm recordId={record.id} onReturn={onReturnReceivedForSent} isReceived={true} />
+                    </div>
+                  )
+                )}
               </motion.div>
             ))}
           </div>

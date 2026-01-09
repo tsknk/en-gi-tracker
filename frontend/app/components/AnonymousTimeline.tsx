@@ -1,4 +1,3 @@
-"use client";
 import { Gift, SendHorizontal, Sparkles, Globe } from 'lucide-react';
 import { motion } from 'framer-motion';
 import type { GiftRecord, SentGiftRecord } from './GiftRecordForm';

@@ -1,4 +1,3 @@
-"use client";
 import { useState } from 'react';
 import { ArrowLeftRight } from 'lucide-react';
 import { Button } from './ui/button';
@@ -18,9 +17,10 @@ interface ReturnGiftFormProps {
       notes?: string;
     }
   ) => void;
+  isReceived?: boolean; // true if this is for recording received return (for sent gifts)
 }
 
-export function ReturnGiftForm({ recordId, onReturn }: ReturnGiftFormProps) {
+export function ReturnGiftForm({ recordId, onReturn, isReceived = false }: ReturnGiftFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
     date: new Date().toISOString().split('T')[0],
@@ -56,7 +56,7 @@ export function ReturnGiftForm({ recordId, onReturn }: ReturnGiftFormProps) {
         className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white"
       >
         <ArrowLeftRight className="size-3.5 mr-1.5" />
-        お返しを記録
+        {isReceived ? 'お返しを受け取ったことを記録' : 'お返しを記録'}
       </Button>
     );
   }
@@ -68,14 +68,14 @@ export function ReturnGiftForm({ recordId, onReturn }: ReturnGiftFormProps) {
       animate={{ height: 'auto', opacity: 1 }}
     >
       <div className="flex items-center gap-2 mb-3">
-        <ArrowLeftRight className="size-4 text-green-600" />
-        <h4 className="font-semibold text-green-900">お返しを記録</h4>
+        <ArrowLeftRight className={`size-4 text-green-600 ${isReceived ? 'rotate-180' : ''}`} />
+        <h4 className="font-semibold text-green-900">{isReceived ? 'お返しを受け取ったことを記録' : 'お返しを記録'}</h4>
       </div>
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <Label htmlFor={`return-date-${recordId}`} className="text-xs">
-              お返しした日
+              {isReceived ? 'お返しを受け取った日' : 'お返しした日'}
             </Label>
             <Input
               id={`return-date-${recordId}`}
@@ -88,7 +88,7 @@ export function ReturnGiftForm({ recordId, onReturn }: ReturnGiftFormProps) {
           </div>
           <div>
             <Label htmlFor={`return-item-${recordId}`} className="text-xs">
-              お返しした物
+              {isReceived ? 'お返しとして受け取った物' : 'お返しした物'}
             </Label>
             <Input
               id={`return-item-${recordId}`}

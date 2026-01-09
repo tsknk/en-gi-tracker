@@ -1,82 +1,126 @@
-"use client";
-import { Sparkles, TrendingUp } from 'lucide-react';
+import { TrendingUp, Info } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Progress } from './ui/progress';
+import { useState } from 'react';
 
 interface EngiMeterProps {
-  level: number; // 0-100
+  level: number;
 }
 
 export function EngiMeter({ level }: EngiMeterProps) {
-  const getEngiStatus = (level: number) => {
-    if (level >= 80) return { text: '大吉', color: 'text-yellow-600', glow: 'from-yellow-400 to-amber-500' };
-    if (level >= 60) return { text: '中吉', color: 'text-amber-600', glow: 'from-amber-400 to-orange-400' };
-    if (level >= 40) return { text: '吉', color: 'text-orange-600', glow: 'from-orange-400 to-rose-400' };
-    if (level >= 20) return { text: '小吉', color: 'text-rose-600', glow: 'from-rose-400 to-pink-400' };
-    return { text: '始まり', color: 'text-gray-600', glow: 'from-gray-400 to-gray-500' };
+  const [showInfo, setShowInfo] = useState(false);
+
+  const getColor = () => {
+    if (level >= 80) return 'from-yellow-400 to-amber-500';
+    if (level >= 60) return 'from-amber-400 to-orange-400';
+    if (level >= 40) return 'from-orange-300 to-rose-400';
+    if (level >= 20) return 'from-pink-400 to-purple-400';
+    return 'from-blue-400 to-purple-400';
   };
 
-  const status = getEngiStatus(level);
+  const getLevelLabel = () => {
+    if (level >= 80) return '最高レベル';
+    if (level >= 60) return 'ハイレベル';
+    if (level >= 40) return 'ミドルレベル';
+    if (level >= 20) return 'ビギナー+';
+    return 'ビギナー';
+  };
 
   return (
-    <motion.div
-      className="bg-gradient-to-br from-white to-amber-50/50 rounded-2xl p-6 shadow-lg border border-amber-200/50 relative overflow-hidden"
-      initial={{ scale: 0.95, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={{ duration: 0.5 }}
-    >
-      {/* Background Glow Effect */}
-      {level > 0 && (
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-br from-yellow-200/20 to-amber-200/20"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: level / 100 }}
-          transition={{ duration: 0.8 }}
-        />
-      )}
-
-      <div className="relative z-10">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <div className={`bg-gradient-to-br ${status.glow} p-2.5 rounded-full`}>
-              <TrendingUp className="size-5 text-white" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-600">縁起バロメーター</p>
-              <p className={`text-xl font-bold ${status.color}`}>{status.text}</p>
-            </div>
-          </div>
-          <motion.div
-            animate={{
-              scale: level > 80 ? [1, 1.1, 1] : 1,
-              rotate: level > 80 ? [0, 5, -5, 0] : 0,
-            }}
-            transition={{ duration: 2, repeat: level > 80 ? Infinity : 0 }}
-          >
-            <Sparkles className={`size-8 ${level > 60 ? 'text-yellow-500 fill-yellow-500' : 'text-gray-300'}`} />
-          </motion.div>
+    <div className="bg-white rounded-2xl p-6 shadow-md border border-purple-100">
+      <div className="flex items-center gap-3 mb-4">
+        <TrendingUp className="size-6 text-purple-600" />
+        <div>
+          <h3 className="text-lg font-semibold text-gray-800">レベル</h3>
+          <p className="text-xs text-gray-500">{getLevelLabel()}</p>
         </div>
-
-        <div className="space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-600">レベル {Math.floor(level / 10)}</span>
-            <span className={`font-semibold ${status.color}`}>{level}%</span>
-          </div>
-          <div className="relative">
-            <Progress value={level} className="h-3" />
-            {level > 70 && (
-              <motion.div
-                className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent"
-                animate={{ x: ['-100%', '200%'] }}
-                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-              />
-            )}
-          </div>
-          <p className="text-xs text-gray-500 text-center mt-2">
-            感謝を重ねると縁起が上がります
-          </p>
+        <button
+          onClick={() => setShowInfo(!showInfo)}
+          className="ml-auto p-2 hover:bg-purple-50 rounded-full transition-colors"
+          aria-label="レベルの説明"
+        >
+          <Info className="size-5 text-purple-500" />
+        </button>
+        <div>
+          <span className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+            {level}
+          </span>
+          <span className="text-sm text-gray-500 ml-1">/100</span>
         </div>
       </div>
-    </motion.div>
+
+      {/* Info Panel */}
+      {showInfo && (
+        <motion.div
+          className="mb-4 p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl border border-purple-200"
+          initial={{ height: 0, opacity: 0 }}
+          animate={{ height: 'auto', opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <h4 className="font-semibold text-purple-900 mb-2 text-sm">レベルの上げ方</h4>
+          <div className="space-y-2 text-sm text-gray-700">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-rose-400"></div>
+              <span>いただいた贈り物を記録：<strong className="text-rose-600">+5</strong></span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+              <span>お渡しした贈り物を記録：<strong className="text-blue-600">+10</strong></span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-green-400"></div>
+              <span>お返しを記録：<strong className="text-green-600">+3</strong></span>
+            </div>
+          </div>
+          <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-purple-200">
+            💡 お渡しした贈り物は2倍のポイントで、より早くレベルアップできます
+          </p>
+          
+          <div className="mt-4 pt-3 border-t border-purple-200">
+            <h4 className="font-semibold text-purple-900 mb-2 text-sm">レベルの段階</h4>
+            <div className="space-y-1.5 text-xs text-gray-700">
+              <div className="flex justify-between">
+                <span>レベル 0-19</span>
+                <strong className="text-blue-600">ビギナー</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>レベル 20-39</span>
+                <strong className="text-pink-600">ビギナー+</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>レベル 40-59</span>
+                <strong className="text-orange-600">ミドルレベル</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>レベル 60-79</span>
+                <strong className="text-amber-600">ハイレベル</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>レベル 80-100</span>
+                <strong className="text-yellow-600">最高レベル</strong>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {/* Progress Bar */}
+      <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden">
+        <motion.div
+          className={`h-full bg-gradient-to-r ${getColor()} rounded-full`}
+          initial={{ width: 0 }}
+          animate={{ width: `${level}%` }}
+          transition={{ duration: 1, ease: 'easeOut' }}
+        />
+      </div>
+
+      {/* Level milestones */}
+      <div className="flex justify-between mt-2 text-xs text-gray-500">
+        <span>0</span>
+        <span>25</span>
+        <span>50</span>
+        <span>75</span>
+        <span>100</span>
+      </div>
+    </div>
   );
 }

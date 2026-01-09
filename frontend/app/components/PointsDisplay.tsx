@@ -1,4 +1,3 @@
-"use client";
 import { Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 

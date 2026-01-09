@@ -1,4 +1,3 @@
-"use client";
 import { useState } from 'react';
 import { Heart, Gift, Plus, SendHorizontal } from 'lucide-react';
 import { Button } from './ui/button';
@@ -194,7 +193,7 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
                   value={giftFormData.category}
                   onValueChange={(value) => setGiftFormData({ ...giftFormData, category: value })}
                 >
-                  <SelectTrigger className="border-blue-200">
+                  <SelectTrigger className="border-blue-200 bg-white">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>
@@ -291,7 +290,7 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
                   value={giftFormData.category}
                   onValueChange={(value) => setGiftFormData({ ...giftFormData, category: value })}
                 >
-                  <SelectTrigger className="border-blue-200">
+                  <SelectTrigger className="border-blue-200 bg-white">
                     <SelectValue placeholder="選択してください" />
                   </SelectTrigger>
                   <SelectContent>
