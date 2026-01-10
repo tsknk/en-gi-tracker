@@ -6,8 +6,10 @@ import { type GiftRecord, type SentGiftRecord } from './components/GiftRecordFor
 import { GiftRecordList } from './components/GiftRecordList';
 import { UnifiedRecordForm } from './components/UnifiedRecordForm';
 import { Toaster } from './components/ui/sonner';
+import { Button } from './components/ui/button';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { createClient } from '@/utils/supabase/client';
 
 export default function App() {
   const [engiLevel, setEngiLevel] = useState(0);
@@ -129,6 +131,42 @@ export default function App() {
     toast.success('記録を削除しました');
   };
 
+  const handleSaveTestData = async () => {
+    try {
+      const supabase = createClient();
+      
+      // idを明示的に指定せず、データベースの自動生成に任せる
+      const { error, data } = await supabase
+        .from('gift_logs')
+        .insert({
+          user_id: '00000000-0000-0000-0000-000000000000',
+          item_name: '接続テスト成功！',
+        } as any) // idを除外するために型アサーションを使用
+        .select();
+
+      if (error) {
+        const errorMessage = error.message || 'エラーが発生しました';
+        console.error('保存エラー:', error);
+        console.error('エラー詳細:', JSON.stringify(error, null, 2));
+        toast.error('保存に失敗しました', {
+          description: errorMessage,
+        });
+        return;
+      }
+
+      console.log('保存しました！', data);
+      toast.success('保存しました！', {
+        description: 'テストデータをgift_logsテーブルに保存しました',
+      });
+    } catch (err) {
+      console.error('予期しないエラー:', err);
+      const errorMessage = err instanceof Error ? err.message : '予期しないエラーが発生しました';
+      toast.error('予期しないエラーが発生しました', {
+        description: errorMessage,
+      });
+    }
+  };
+
   // Dynamic background glow based on level
   const getBackgroundStyle = () => {
     if (engiLevel >= 80) {
@@ -185,10 +223,21 @@ export default function App() {
             initial={{ y: -20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
           >
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 bg-clip-text text-transparent mb-1">
-              贈答記録帳
-            </h1>
-            <p className="text-sm text-gray-600">いただいた贈り物と、お渡しした贈り物を記録</p>
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-600 via-pink-600 to-amber-600 bg-clip-text text-transparent mb-1">
+                  贈答記録帳
+                </h1>
+                <p className="text-sm text-gray-600">いただいた贈り物と、お渡しした贈り物を記録</p>
+              </div>
+              <Button
+                onClick={handleSaveTestData}
+                variant="outline"
+                className="border-blue-300 text-blue-700 hover:bg-blue-50"
+              >
+                テストデータを保存
+              </Button>
+            </div>
           </motion.div>
         </header>
 
