@@ -1,14 +1,17 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gift, Calendar, User, ArrowUpDown, ArrowUp, ArrowDown, SendHorizontal, X, ArrowRight, ArrowLeftRight, LogOut, Mail } from 'lucide-react';
+import { Gift, Calendar, User, ArrowUpDown, ArrowUp, ArrowDown, SendHorizontal, X, ArrowRight, ArrowLeftRight, LogOut, Mail, Edit, Trash2 } from 'lucide-react';
 import { EngiMeter } from './components/EngiMeter';
 import { UserProfile } from './components/UserProfile';
 import { type GiftRecord, type SentGiftRecord } from './components/GiftRecordForm';
 import { UnifiedRecordForm } from './components/UnifiedRecordForm';
+import { EditGiftDialog } from './components/EditGiftDialog';
+import { EditReturnDialog } from './components/EditReturnDialog';
 import { Toaster } from './components/ui/sonner';
 import { Button } from './components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './components/ui/card';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './components/ui/alert-dialog';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { createClient } from '@/utils/supabase/client';
@@ -46,6 +49,10 @@ export default function App() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isEmailConfirmed, setIsEmailConfirmed] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<GiftLog | null>(null);
+  const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
+  const [editingReturnRecord, setEditingReturnRecord] = useState<GiftLog | null>(null);
+  const [deletingReturnRecordId, setDeletingReturnRecordId] = useState<number | null>(null);
   
   // 認証ユーザーIDを取得
   useEffect(() => {
@@ -679,6 +686,284 @@ export default function App() {
     }
   };
 
+  // 更新ハンドラー
+  const handleUpdateGift = async (
+    id: number,
+    data: {
+      date: string;
+      partner: string;
+      recipient?: string;
+      category: string;
+      item_name: string;
+      amount: number;
+      is_cash: boolean;
+      memo?: string;
+    }
+  ) => {
+    if (!currentUserId) {
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('gift_logs')
+        .update({
+          date: data.date,
+          partner: data.partner,
+          recipient: data.recipient || null,
+          category: data.category,
+          item_name: data.item_name,
+          amount: data.amount,
+          is_cash: data.is_cash,
+          memo: data.memo || null,
+        })
+        .eq('id', id)
+        .eq('user_id', currentUserId);
+
+      if (error) {
+        console.error('更新エラー:', error);
+        toast.error('更新に失敗しました', {
+          description: error.message,
+        });
+        throw error;
+      }
+
+      // リストを再読み込み
+      const { data: logs } = await supabase
+        .from('gift_logs')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .is('deleted_at', null)
+        .order('date', { ascending: sortOrder === 'asc' });
+
+      setGiftLogs(logs || []);
+      toast.success('記録を更新しました');
+    } catch (err: any) {
+      console.error('更新エラー:', err);
+      throw err;
+    }
+  };
+
+  // 削除ハンドラー
+  const handleDeleteGift = async (id: number) => {
+    if (!currentUserId) {
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      
+      // 削除前にレコード情報を取得（ポイント減算のため）
+      const { data: recordToDelete } = await supabase
+        .from('gift_logs')
+        .select('type, return_status')
+        .eq('id', id)
+        .eq('user_id', currentUserId)
+        .single();
+
+      if (!recordToDelete) {
+        toast.error('削除対象の記録が見つかりません');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('gift_logs')
+        .update({
+          deleted_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('user_id', currentUserId);
+
+      if (error) {
+        console.error('削除エラー:', error);
+        toast.error('削除に失敗しました', {
+          description: error.message,
+        });
+        return;
+      }
+
+      // ポイントを減算
+      let pointsToSubtract = 0;
+      const isReceived = recordToDelete.type === 'received' || recordToDelete.type === '受け取ったもの';
+      
+      if (isReceived) {
+        // 受け取った贈り物: -5ポイント
+        pointsToSubtract = 5;
+        // お返し済みの場合、お返しのポイントも減算: -3ポイント
+        if (recordToDelete.return_status) {
+          pointsToSubtract += 3;
+        }
+      } else {
+        // 送った贈り物: -10ポイント
+        pointsToSubtract = 10;
+        // お返しを受け取り済みの場合、お返し受け取りのポイントも減算: -5ポイント
+        if (recordToDelete.return_status) {
+          pointsToSubtract += 5;
+        }
+      }
+
+      // ポイントを更新（負の値を渡すことで減算）
+      try {
+        await updateUserStats(-pointsToSubtract);
+      } catch (statsError: any) {
+        console.warn('ポイント更新でエラーが発生しましたが、記録の削除は成功しています:', statsError);
+      }
+
+      // リストを再読み込み
+      const { data: logs } = await supabase
+        .from('gift_logs')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .is('deleted_at', null)
+        .order('date', { ascending: sortOrder === 'asc' });
+
+      setGiftLogs(logs || []);
+      
+      // total_xxxカラムを更新
+      await updateUserStatsCounts();
+
+      toast.success('記録を削除しました');
+      setDeletingRecordId(null);
+    } catch (err: any) {
+      console.error('削除エラー:', err);
+      toast.error('削除に失敗しました');
+    }
+  };
+
+  // お返し情報の更新ハンドラー
+  const handleUpdateReturn = async (
+    id: number,
+    data: {
+      return_date: string;
+      return_item: string;
+      return_amount: number;
+      return_memo?: string;
+    }
+  ) => {
+    if (!currentUserId) {
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from('gift_logs')
+        .update({
+          return_date: data.return_date,
+          return_item: data.return_item,
+          return_amount: data.return_amount,
+          return_memo: data.return_memo || null,
+        })
+        .eq('id', id)
+        .eq('user_id', currentUserId);
+
+      if (error) {
+        console.error('更新エラー:', error);
+        toast.error('更新に失敗しました', {
+          description: error.message,
+        });
+        throw error;
+      }
+
+      // リストを再読み込み
+      const { data: logs } = await supabase
+        .from('gift_logs')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .is('deleted_at', null)
+        .order('date', { ascending: sortOrder === 'asc' });
+
+      setGiftLogs(logs || []);
+      toast.success('お返しの記録を更新しました');
+    } catch (err: any) {
+      console.error('更新エラー:', err);
+      throw err;
+    }
+  };
+
+  // お返し情報の削除ハンドラー
+  const handleDeleteReturn = async (id: number) => {
+    if (!currentUserId) {
+      return;
+    }
+
+    try {
+      const supabase = createClient();
+      
+      // 削除前にレコード情報を取得（ポイント減算のため）
+      const { data: recordToUpdate } = await supabase
+        .from('gift_logs')
+        .select('type')
+        .eq('id', id)
+        .eq('user_id', currentUserId)
+        .single();
+
+      if (!recordToUpdate) {
+        toast.error('更新対象の記録が見つかりません');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('gift_logs')
+        .update({
+          return_status: false,
+          return_date: null,
+          return_item: null,
+          return_amount: null,
+          return_memo: null,
+        })
+        .eq('id', id)
+        .eq('user_id', currentUserId);
+
+      if (error) {
+        console.error('削除エラー:', error);
+        toast.error('削除に失敗しました', {
+          description: error.message,
+        });
+        return;
+      }
+
+      // ポイントを減算
+      const isReceived = recordToUpdate.type === 'received' || recordToUpdate.type === '受け取ったもの';
+      let pointsToSubtract = 0;
+      
+      if (isReceived) {
+        // 受け取った贈り物のお返し: -3ポイント
+        pointsToSubtract = 3;
+      } else {
+        // 送った贈り物のお返し受け取り: -5ポイント
+        pointsToSubtract = 5;
+      }
+
+      // ポイントを更新（負の値を渡すことで減算）
+      try {
+        await updateUserStats(-pointsToSubtract);
+      } catch (statsError: any) {
+        console.warn('ポイント更新でエラーが発生しましたが、お返し記録の削除は成功しています:', statsError);
+      }
+
+      // リストを再読み込み
+      const { data: logs } = await supabase
+        .from('gift_logs')
+        .select('*')
+        .eq('user_id', currentUserId)
+        .is('deleted_at', null)
+        .order('date', { ascending: sortOrder === 'asc' });
+
+      setGiftLogs(logs || []);
+      
+      // total_xxxカラムを更新
+      await updateUserStatsCounts();
+
+      toast.success('お返しの記録を削除しました');
+      setDeletingReturnRecordId(null);
+    } catch (err: any) {
+      console.error('削除エラー:', err);
+      toast.error('削除に失敗しました');
+    }
+  };
+
   // Dynamic background glow based on points
   const getBackgroundStyle = () => {
     if (points >= 80) {
@@ -892,9 +1177,28 @@ export default function App() {
                                       <span className="text-sm text-gray-400">-</span>
                                     )}
                                   </div>
-                                  {/* 展開/折りたたみボタン */}
-                                  {!log.return_status && (
-                                    <div className="flex-shrink-0">
+                                  {/* アクションボタン */}
+                                  <div className="flex-shrink-0 flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setEditingRecord(log)}
+                                      className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                      title="編集"
+                                    >
+                                      <Edit className="size-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setDeletingRecordId(log.id)}
+                                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      title="削除"
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </Button>
+                                    {/* 展開/折りたたみボタン */}
+                                    {!log.return_status && (
                                       <Button
                                         variant="ghost"
                                         size="sm"
@@ -903,8 +1207,8 @@ export default function App() {
                                       >
                                         {isExpanded ? '閉じる' : 'お返し設定'}
                                       </Button>
-                                    </div>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               </motion.div>
                               
@@ -920,9 +1224,31 @@ export default function App() {
                                   <div className="p-4">
                                     {log.return_status ? (
                                       <div>
-                                        <div className="flex items-center gap-2 text-green-700 mb-2">
-                                          <ArrowRight className="size-4" />
-                                          <span className="font-semibold">お返し済み</span>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-2 text-green-700">
+                                            <ArrowRight className="size-4" />
+                                            <span className="font-semibold">お返し済み</span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => setEditingReturnRecord(log)}
+                                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                              title="編集"
+                                            >
+                                              <Edit className="size-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => setDeletingReturnRecordId(log.id)}
+                                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                              title="削除"
+                                            >
+                                              <Trash2 className="size-4" />
+                                            </Button>
+                                          </div>
                                         </div>
                                         <div className="flex items-center gap-4 text-sm text-gray-600 ml-6 flex-wrap">
                                           {log.return_date && (
@@ -1181,9 +1507,28 @@ export default function App() {
                                       <span className="text-sm text-gray-400">-</span>
                                     )}
                                   </div>
-                                  {/* 展開/折りたたみボタン */}
-                                  {!log.return_status && (
-                                    <div className="flex-shrink-0">
+                                  {/* アクションボタン */}
+                                  <div className="flex-shrink-0 flex items-center gap-1">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setEditingRecord(log)}
+                                      className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                      title="編集"
+                                    >
+                                      <Edit className="size-4" />
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => setDeletingRecordId(log.id)}
+                                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                      title="削除"
+                                    >
+                                      <Trash2 className="size-4" />
+                                    </Button>
+                                    {/* 展開/折りたたみボタン */}
+                                    {!log.return_status && (
                                       <Button
                                         variant="ghost"
                                         size="sm"
@@ -1192,8 +1537,8 @@ export default function App() {
                                       >
                                         {isExpanded ? '閉じる' : 'お返し設定'}
                                       </Button>
-                                    </div>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               </motion.div>
                               
@@ -1209,9 +1554,31 @@ export default function App() {
                                   <div className="p-4">
                                     {log.return_status ? (
                                       <div>
-                                        <div className="flex items-center gap-2 text-green-700 mb-2">
-                                          <ArrowRight className="size-4 rotate-180" />
-                                          <span className="font-semibold">お返しを受け取り済み</span>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <div className="flex items-center gap-2 text-green-700">
+                                            <ArrowRight className="size-4 rotate-180" />
+                                            <span className="font-semibold">お返しを受け取り済み</span>
+                                          </div>
+                                          <div className="flex items-center gap-1">
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => setEditingReturnRecord(log)}
+                                              className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                              title="編集"
+                                            >
+                                              <Edit className="size-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => setDeletingReturnRecordId(log.id)}
+                                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                              title="削除"
+                                            >
+                                              <Trash2 className="size-4" />
+                                            </Button>
+                                          </div>
                                         </div>
                                         <div className="flex items-center gap-4 text-sm text-gray-600 ml-6 flex-wrap">
                                           {log.return_date && (
@@ -1369,6 +1736,65 @@ export default function App() {
             </div>
           )}
         </div>
+
+        {/* 編集ダイアログ */}
+        <EditGiftDialog
+          isOpen={!!editingRecord}
+          onClose={() => setEditingRecord(null)}
+          record={editingRecord}
+          onUpdate={handleUpdateGift}
+        />
+
+        {/* お返し情報編集ダイアログ */}
+        <EditReturnDialog
+          isOpen={!!editingReturnRecord}
+          onClose={() => setEditingReturnRecord(null)}
+          record={editingReturnRecord}
+          isReceived={editingReturnRecord?.type === 'received' || editingReturnRecord?.type === '受け取ったもの'}
+          onUpdate={handleUpdateReturn}
+        />
+
+        {/* 削除確認ダイアログ */}
+        <AlertDialog open={deletingRecordId !== null} onOpenChange={(open) => !open && setDeletingRecordId(null)}>
+          <AlertDialogContent overlayClassName="bg-white/95 backdrop-blur-sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>削除の確認</AlertDialogTitle>
+              <AlertDialogDescription>
+                この記録を削除してもよろしいですか？この操作は取り消せません。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>キャンセル</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deletingRecordId && handleDeleteGift(deletingRecordId)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                削除する
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* お返し情報削除確認ダイアログ */}
+        <AlertDialog open={deletingReturnRecordId !== null} onOpenChange={(open) => !open && setDeletingReturnRecordId(null)}>
+          <AlertDialogContent overlayClassName="bg-white/95 backdrop-blur-sm">
+            <AlertDialogHeader>
+              <AlertDialogTitle>お返し記録の削除</AlertDialogTitle>
+              <AlertDialogDescription>
+                お返しの記録を削除してもよろしいですか？この操作は取り消せません。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>キャンセル</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => deletingReturnRecordId && handleDeleteReturn(deletingReturnRecordId)}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                削除する
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
       </div>
     </div>
