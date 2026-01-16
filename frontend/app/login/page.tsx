@@ -60,14 +60,93 @@ export default function LoginPage() {
       });
 
       if (error) {
-        toast.error('ログインに失敗しました', {
-          description: error.message,
+        // デバッグ用: エラー情報をコンソールに出力
+        console.log('ログインエラー詳細:', {
+          code: error.code,
+          message: error.message,
+          status: error.status,
+          error: error,
         });
+
+        // メール認証が完了していない場合の特別な処理
+        // より広範囲な検出条件を追加
+        const isEmailNotConfirmed = 
+          error.code === 'email_not_confirmed' ||
+          /Email not confirmed/i.test(error.message) ||
+          /email.*not.*confirmed/i.test(error.message) ||
+          /メール.*確認/i.test(error.message) ||
+          error.message?.includes('email_not_confirmed');
+
+        if (isEmailNotConfirmed) {
+          toast.error('メール認証が完了していません', {
+            description: '登録時に送信されたメール内のリンクをクリックして、メールアドレスを確認してください。',
+            duration: 6000,
+            action: {
+              label: '確認メールを再送信',
+              onClick: async () => {
+                try {
+                  const { error: resendError } = await supabase.auth.resend({
+                    type: 'signup',
+                    email,
+                  });
+                  if (resendError) {
+                    toast.error('確認メールの再送信に失敗しました', {
+                      description: resendError.message,
+                    });
+                  } else {
+                    toast.success('確認メールを再送信しました', {
+                      description: 'メールボックスを確認してください。',
+                    });
+                  }
+                } catch (err: any) {
+                  toast.error('確認メールの再送信中にエラーが発生しました');
+                }
+              },
+            },
+          });
+        } else {
+          // その他のエラーの場合は汎用的なメッセージを表示
+          toast.error('ログインに失敗しました', {
+            description: error.message || 'メールアドレスまたはパスワードが正しくありません。',
+          });
+        }
         setIsLoading(false);
         return;
       }
 
       if (data.user) {
+        // メール認証が完了しているかチェック
+        if (!data.user.email_confirmed_at) {
+          toast.error('メール認証が完了していません', {
+            description: '登録時に送信されたメール内のリンクをクリックして、メールアドレスを確認してください。',
+            duration: 6000,
+            action: {
+              label: '確認メールを再送信',
+              onClick: async () => {
+                try {
+                  const { error: resendError } = await supabase.auth.resend({
+                    type: 'signup',
+                    email,
+                  });
+                  if (resendError) {
+                    toast.error('確認メールの再送信に失敗しました', {
+                      description: resendError.message,
+                    });
+                  } else {
+                    toast.success('確認メールを再送信しました', {
+                      description: 'メールボックスを確認してください。',
+                    });
+                  }
+                } catch (err: any) {
+                  toast.error('確認メールの再送信中にエラーが発生しました');
+                }
+              },
+            },
+          });
+          setIsLoading(false);
+          return;
+        }
+
         toast.success('ログインしました');
         
         // ログイン成功後、メインページにリダイレクト
