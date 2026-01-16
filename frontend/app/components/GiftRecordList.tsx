@@ -88,11 +88,26 @@ export function GiftRecordList({ receivedRecords, sentRecords, onReturn, onRetur
                       <ArrowRight className="size-4" />
                       <span className="text-sm font-semibold">お返し済み</span>
                     </div>
-                    <div className="ml-6 text-sm text-gray-600">
-                      <p>日付: {record.returned.date}</p>
-                      <p>品物: {record.returned.itemName}</p>
-                      {record.returned.amount > 0 && <p>金額: ¥{record.returned.amount.toLocaleString()}</p>}
-                      {record.returned.notes && <p className="text-xs text-gray-500 mt-1">💬 {record.returned.notes}</p>}
+                    <div className="ml-6 flex items-center gap-4 text-sm text-gray-600 flex-wrap">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="size-3 text-gray-400" />
+                        <span>{record.returned.date}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Gift className="size-3 text-gray-400" />
+                        <span>{record.returned.itemName}</span>
+                      </span>
+                      {record.returned.amount > 0 && (
+                        <span className="flex items-center gap-1 font-semibold text-green-600">
+                          <span>¥{record.returned.amount.toLocaleString()}</span>
+                        </span>
+                      )}
+                      {record.returned.notes && (
+                        <span className="flex items-center gap-1 text-gray-500">
+                          <span>💬</span>
+                          <span>{record.returned.notes}</span>
+                        </span>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -168,11 +183,26 @@ export function GiftRecordList({ receivedRecords, sentRecords, onReturn, onRetur
                         <ArrowRight className="size-4 rotate-180" />
                         <span className="text-sm font-semibold">お返しを受け取り済み</span>
                       </div>
-                      <div className="ml-6 text-sm text-gray-600">
-                        <p>日付: {record.returned.date}</p>
-                        <p>品物: {record.returned.itemName}</p>
-                        {record.returned.amount > 0 && <p>金額: ¥{record.returned.amount.toLocaleString()}</p>}
-                        {record.returned.notes && <p className="text-xs text-gray-500 mt-1">💬 {record.returned.notes}</p>}
+                      <div className="flex items-center gap-4 text-sm text-gray-600 ml-6 flex-wrap">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="size-3 text-gray-400" />
+                          <span>{record.returned.date}</span>
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Gift className="size-3 text-gray-400" />
+                          <span>{record.returned.itemName}</span>
+                        </span>
+                        {record.returned.amount > 0 && (
+                          <span className="flex items-center gap-1 font-semibold text-green-600">
+                            <span>¥{record.returned.amount.toLocaleString()}</span>
+                          </span>
+                        )}
+                        {record.returned.notes && (
+                          <span className="flex items-center gap-1 text-xs text-gray-500">
+                            <span>💬</span>
+                            <span>{record.returned.notes}</span>
+                          </span>
+                        )}
                       </div>
                     </div>
                   ) : (

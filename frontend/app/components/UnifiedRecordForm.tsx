@@ -44,6 +44,7 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
   const [giftFormData, setGiftFormData] = useState({
     date: new Date().toISOString().split('T')[0],
     fromWhom: '',
+    recipient: '', // 誰への贈り物か
     itemName: '',
     category: '',
     amount: '',
@@ -59,6 +60,7 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
         onSubmitReceived({
           date: giftFormData.date,
           fromWhom: giftFormData.fromWhom,
+          recipient: giftFormData.recipient || undefined,
           itemName: giftFormData.itemName,
           category: giftFormData.category,
           amount: parseFloat(giftFormData.amount) || 0,
@@ -69,6 +71,7 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
         setGiftFormData({
           date: new Date().toISOString().split('T')[0],
           fromWhom: '',
+          recipient: '',
           itemName: '',
           category: '',
           amount: '',
@@ -92,6 +95,7 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
         setGiftFormData({
           date: new Date().toISOString().split('T')[0],
           fromWhom: '',
+          recipient: '',
           itemName: '',
           category: '',
           amount: '',
@@ -184,6 +188,18 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
                   className="border-blue-200"
                 />
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="recipient">誰への贈り物か（任意）</Label>
+              <Input
+                id="recipient"
+                placeholder="例：子供の名前（お年玉の場合など）"
+                value={giftFormData.recipient}
+                onChange={(e) => setGiftFormData({ ...giftFormData, recipient: e.target.value })}
+                className="border-blue-200"
+              />
+              <p className="text-xs text-gray-500 mt-1">子供のお年玉など、誰かへの贈り物を受け取った場合に入力してください</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -17,6 +17,7 @@ export interface GiftRecord {
   id: string;
   date: string;
   fromWhom: string;
+  recipient?: string; // 誰への贈り物か（例：子供のお年玉の場合、子供の名前）
   itemName: string;
   category: string;
   amount: number;

@@ -1,0 +1,16 @@
+# 機密情報ファイル
+.env
+.env.local
+.env.production
+.env.development
+
+# Gitの設定
+.git/
+
+# 依存ライブラリ（AIが読む必要がない巨大フォルダ）
+node_modules/
+
+# ビルド成果物
+.next/
+dist/
+build/

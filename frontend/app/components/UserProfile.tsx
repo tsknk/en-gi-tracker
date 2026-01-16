@@ -3,24 +3,24 @@ import { motion } from 'framer-motion';
 
 interface UserProfileProps {
   currentTitle: string;
-  engiLevel: number;
+  points: number;
 }
 
-export function UserProfile({ currentTitle, engiLevel }: UserProfileProps) {
-  // Calculate border glow intensity based on level
+export function UserProfile({ currentTitle, points }: UserProfileProps) {
+  // Calculate border glow intensity based on points
   const getBorderGlow = () => {
-    if (engiLevel >= 80) return 'shadow-lg shadow-yellow-300/50 border-yellow-300';
-    if (engiLevel >= 60) return 'shadow-lg shadow-amber-300/50 border-amber-300';
-    if (engiLevel >= 40) return 'shadow-md shadow-orange-300/40 border-orange-200';
-    if (engiLevel >= 20) return 'shadow-md shadow-pink-300/40 border-pink-200';
+    if (points >= 80) return 'shadow-lg shadow-yellow-300/50 border-yellow-300';
+    if (points >= 60) return 'shadow-lg shadow-amber-300/50 border-amber-300';
+    if (points >= 40) return 'shadow-md shadow-orange-300/40 border-orange-200';
+    if (points >= 20) return 'shadow-md shadow-pink-300/40 border-pink-200';
     return 'shadow-sm border-purple-100';
   };
 
   const getAvatarGlow = () => {
-    if (engiLevel >= 80) return 'ring-4 ring-yellow-300 ring-offset-2 ring-offset-white';
-    if (engiLevel >= 60) return 'ring-3 ring-amber-300 ring-offset-2 ring-offset-white';
-    if (engiLevel >= 40) return 'ring-2 ring-orange-300 ring-offset-2 ring-offset-white';
-    if (engiLevel >= 20) return 'ring-2 ring-pink-200 ring-offset-2 ring-offset-white';
+    if (points >= 80) return 'ring-4 ring-yellow-300 ring-offset-2 ring-offset-white';
+    if (points >= 60) return 'ring-3 ring-amber-300 ring-offset-2 ring-offset-white';
+    if (points >= 40) return 'ring-2 ring-orange-300 ring-offset-2 ring-offset-white';
+    if (points >= 20) return 'ring-2 ring-pink-200 ring-offset-2 ring-offset-white';
     return 'ring-1 ring-purple-100 ring-offset-2 ring-offset-white';
   };
 
@@ -36,7 +36,7 @@ export function UserProfile({ currentTitle, engiLevel }: UserProfileProps) {
         <motion.div
           className={`relative w-16 h-16 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center ${getAvatarGlow()}`}
           animate={
-            engiLevel >= 60
+            points >= 60
               ? {
                   scale: [1, 1.05, 1],
                 }
@@ -44,7 +44,7 @@ export function UserProfile({ currentTitle, engiLevel }: UserProfileProps) {
           }
           transition={{
             duration: 2,
-            repeat: engiLevel >= 60 ? Infinity : 0,
+            repeat: points >= 60 ? Infinity : 0,
           }}
         >
           <User className="size-8 text-white" />
@@ -61,9 +61,6 @@ export function UserProfile({ currentTitle, engiLevel }: UserProfileProps) {
               </div>
             )}
           </div>
-          <p className="text-sm text-gray-600">
-            レベル {engiLevel} で記録を継続中
-          </p>
         </div>
       </div>
     </motion.div>
