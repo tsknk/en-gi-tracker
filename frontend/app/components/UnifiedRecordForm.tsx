@@ -111,7 +111,7 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
     return (
       <Button
         onClick={() => setIsOpen(true)}
-        className="w-full bg-gradient-to-r from-rose-500 via-pink-500 to-blue-500 hover:from-rose-600 hover:via-pink-600 hover:to-blue-600 text-white shadow-md"
+        className="bg-gradient-to-r from-rose-500 via-pink-500 to-blue-500 hover:from-rose-600 hover:via-pink-600 hover:to-blue-600 text-white shadow-md"
       >
         <Plus className="size-4 mr-2" />
         記録を追加

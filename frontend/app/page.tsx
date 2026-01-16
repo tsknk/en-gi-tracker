@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { Gift, Calendar, User, ArrowUpDown, ArrowUp, ArrowDown, SendHorizontal, X, ArrowRight, ArrowLeftRight, LogOut, Mail, Edit, Trash2 } from 'lucide-react';
+import { Gift, Calendar, User, ArrowUpDown, ArrowUp, ArrowDown, SendHorizontal, X, ArrowRight, ArrowLeftRight, LogOut, Mail, Edit, Trash2, Download } from 'lucide-react';
 import { EngiMeter } from './components/EngiMeter';
 import { UserProfile } from './components/UserProfile';
 import { type GiftRecord, type SentGiftRecord } from './components/GiftRecordForm';
@@ -818,6 +818,103 @@ export default function App() {
     }
   };
 
+  // CSVエクスポート関数
+  const handleExportToCSV = () => {
+    try {
+      // CSVヘッダー行
+      const headers = [
+        '種別',
+        '日付',
+        '相手/送り先',
+        '受取人',
+        'カテゴリ',
+        '品物名',
+        '金額',
+        '現金/現物',
+        'メモ',
+        'お返しステータス',
+        'お返し日',
+        'お返し品物',
+        'お返し金額',
+        'お返しメモ',
+        '記録日時'
+      ];
+
+      // CSVデータ行を生成
+      const csvRows = giftLogs.map(log => {
+        const type = log.type === 'received' || log.type === '受け取ったもの' ? '受け取ったもの' : '送ったもの';
+        const cashOrItem = log.is_cash ? '現金' : '現物';
+        const returnStatus = log.return_status ? 'あり' : 'なし';
+        const createdDateTime = log.created_at 
+          ? new Date(log.created_at).toLocaleString('ja-JP', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : '';
+
+        return [
+          type,
+          log.date || '',
+          log.partner || '',
+          log.recipient || '',
+          log.category || '',
+          log.item_name || '',
+          log.amount?.toString() || '',
+          cashOrItem,
+          log.memo || '',
+          returnStatus,
+          log.return_date || '',
+          log.return_item || '',
+          log.return_amount?.toString() || '',
+          log.return_memo || '',
+          createdDateTime
+        ].map(field => {
+          // カンマ、ダブルクォート、改行が含まれる場合はダブルクォートで囲む
+          if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+            return `"${field.replace(/"/g, '""')}"`;
+          }
+          return field;
+        });
+      });
+
+      // CSV文字列を生成（BOM付きで日本語対応）
+      const csvContent = '\uFEFF' + [
+        headers.join(','),
+        ...csvRows.map(row => row.join(','))
+      ].join('\n');
+
+      // ダウンロード用のBlobを作成
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      
+      // ファイル名を生成（日付付き）
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const fileName = `贈答記録_${dateStr}.csv`;
+
+      // ダウンロードリンクを作成してクリック
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success('CSVファイルをダウンロードしました', {
+        description: fileName,
+      });
+    } catch (err: any) {
+      console.error('CSVエクスポートエラー:', err);
+      toast.error('CSVのダウンロードに失敗しました', {
+        description: err.message,
+      });
+    }
+  };
+
   // Dynamic background glow based on points
   const getBackgroundStyle = () => {
     if (points >= 80) {
@@ -910,10 +1007,23 @@ export default function App() {
         {/* Main Content */}
         <div className="space-y-6">
           {/* Unified Form */}
-          <UnifiedRecordForm 
-            onSubmitReceived={handleAddReceivedGift}
-            onSubmitSent={handleAddSentGift}
-          />
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <UnifiedRecordForm 
+                onSubmitReceived={handleAddReceivedGift}
+                onSubmitSent={handleAddSentGift}
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleExportToCSV}
+              className="flex items-center gap-2 self-start"
+              disabled={giftLogs.length === 0}
+            >
+              <Download className="size-4" />
+              CSVダウンロード
+            </Button>
+          </div>
 
           {/* Gift Logs from Supabase */}
           {isLoading ? (
