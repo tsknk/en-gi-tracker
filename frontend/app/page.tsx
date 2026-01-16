@@ -211,7 +211,7 @@ export default function App() {
     }
   };
 
-  // Update total counts in user_stats from gift_logs
+  // Update total counts and points in user_stats from gift_logs (冪等的)
   const updateUserStatsCounts = useCallback(async () => {
     if (!currentUserId) {
       return;
@@ -245,6 +245,47 @@ export default function App() {
         log.return_status === true
       ).length || 0;
       
+      // ポイントを冪等的に計算（実際のデータから再計算）
+      let calculatedPoints = 0;
+      
+      if (logs) {
+        for (const log of logs) {
+          const isReceived = log.type === 'received' || log.type === '受け取ったもの';
+          
+          if (isReceived) {
+            // 受け取った贈り物: +3ポイント
+            calculatedPoints += 3;
+            // お返し済みの場合: +5ポイント
+            if (log.return_status) {
+              calculatedPoints += 5;
+            }
+          } else {
+            // 送った贈り物: +10ポイント
+            calculatedPoints += 10;
+            // お返しを受け取り済みの場合: +3ポイント
+            if (log.return_status) {
+              calculatedPoints += 3;
+            }
+          }
+        }
+      }
+      
+      // タイトルを計算（ポイントベース）
+      let newTitle = '';
+      if (calculatedPoints >= 80) {
+        newTitle = '贈答の聖者';
+      } else if (calculatedPoints >= 60) {
+        newTitle = '福徳の守護者';
+      } else if (calculatedPoints >= 40) {
+        newTitle = '交流の達人';
+      } else if (calculatedPoints >= 20) {
+        newTitle = '贈答の実践者';
+      } else if (calculatedPoints >= 10) {
+        newTitle = '心遣いの人';
+      } else if (calculatedPoints >= 5) {
+        newTitle = '記録の初心者';
+      }
+      
       // user_statsを更新（既存のレコードがある場合は更新、ない場合は作成）
       const { error: updateError } = await supabase
         .from('user_stats')
@@ -253,116 +294,21 @@ export default function App() {
           total_received: totalReceived,
           total_sent: totalSent,
           total_returned: totalReturned,
+          points: calculatedPoints,
+          title: newTitle || null,
         });
       
       if (updateError) {
         console.error('user_stats集計更新エラー:', updateError);
+      } else {
+        // 成功した場合、フロントエンドの状態も更新
+        setPoints(calculatedPoints);
+        setCurrentTitle(newTitle);
       }
     } catch (err: any) {
       console.error('user_stats集計更新エラー:', err);
     }
   }, [currentUserId]);
-
-  // Update user points and title in database
-  const updateUserStats = async (pointsToAdd: number) => {
-    if (!currentUserId) {
-      return;
-    }
-    
-    const newPoints = points + pointsToAdd;
-    
-    // タイトルを計算（ポイントベース）
-    let newTitle = '';
-    if (newPoints >= 80) {
-      newTitle = '贈答の聖者';
-    } else if (newPoints >= 60) {
-      newTitle = '福徳の守護者';
-    } else if (newPoints >= 40) {
-      newTitle = '交流の達人';
-    } else if (newPoints >= 20) {
-      newTitle = '贈答の実践者';
-    } else if (newPoints >= 10) {
-      newTitle = '心遣いの人';
-    } else if (newPoints >= 5) {
-      newTitle = '記録の初心者';
-    }
-
-    try {
-      const supabase = createClient();
-
-      // upsertを使用（主キーがuser_idの場合、自動的に認識される）
-      // updated_atはデフォルト値があるので設定不要
-      const { error, data } = await supabase
-        .from('user_stats')
-        .upsert({
-          user_id: currentUserId,
-          points: newPoints,
-          title: newTitle || null,
-        });
-
-      if (error) {
-        // 外部キー制約違反の場合は、より詳細なメッセージを表示
-        if (error.code === '23503') {
-          console.error('外部キー制約違反:', {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-          });
-          toast.error('データベース設定エラー', {
-            description: 'user_statsテーブルの外部キー制約を削除してください。SQL: ALTER TABLE user_stats DROP CONSTRAINT IF EXISTS user_stats_user_id_fkey;',
-            duration: 10000,
-          });
-        } else {
-          console.error('ユーザーステータス更新エラー詳細:', {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-          });
-          console.error('エラーオブジェクト全体:', JSON.stringify(error, null, 2));
-          toast.error('ポイントの更新に失敗しました', {
-            description: error.message || error.details || '不明なエラー',
-          });
-        }
-        // エラーが発生しても、フロントエンドの状態は更新する（DB更新は失敗）
-        setPoints(newPoints);
-        setCurrentTitle(newTitle);
-        return;
-      }
-
-      setPoints(newPoints);
-      setCurrentTitle(newTitle);
-    } catch (err: any) {
-      console.error('ユーザーステータス更新エラー:', err);
-      
-      // エラーメッセージを取得
-      let errorMessage = '不明なエラー';
-      if (err) {
-        if (typeof err === 'string') {
-          errorMessage = err;
-        } else if (err.message) {
-          errorMessage = err.message;
-        } else if (err.details) {
-          errorMessage = err.details;
-        } else if (err.hint) {
-          errorMessage = err.hint;
-        } else if (err.code === '23503') {
-          errorMessage = '外部キー制約違反: user_statsテーブルの外部キー制約を削除してください';
-        } else {
-          errorMessage = JSON.stringify(err);
-        }
-      }
-      
-      toast.error('ポイントの更新に失敗しました', {
-        description: errorMessage,
-      });
-      
-      // エラーが発生しても、フロントエンドの状態は更新する（DB更新は失敗）
-      const newPoints = points + pointsToAdd;
-      setPoints(newPoints);
-    }
-  };
 
   // Fetch gift_logs from Supabase on mount
   useEffect(() => {
@@ -530,7 +476,7 @@ export default function App() {
         return;
       }
 
-      // リストを再読み込み（ポイント更新の前に実行）
+      // リストを再読み込み
       const { data: logs } = await supabase
         .from('gift_logs')
         .select('*')
@@ -540,17 +486,7 @@ export default function App() {
       
       setGiftLogs(logs || []);
 
-      // ポイントを更新（受け取った贈り物: +5ポイント）
-      // ポイント更新が失敗しても、贈り物の記録は成功しているので、エラーを表示するが処理は続行
-      try {
-        await updateUserStats(5);
-      } catch (statsError: any) {
-        // ポイント更新のエラーは updateUserStats 内で処理されているので、
-        // ここではログのみ出力
-        console.warn('ポイント更新でエラーが発生しましたが、贈り物の記録は成功しています:', statsError);
-      }
-
-      // total_xxxカラムを更新
+      // total_xxxカラムとポイントを冪等的に更新
       await updateUserStatsCounts();
 
       toast.success('贈り物を記録しました', {
@@ -626,7 +562,7 @@ export default function App() {
         return;
       }
 
-      // リストを再読み込み（ポイント更新の前に実行）
+      // リストを再読み込み
       const { data: logs } = await supabase
         .from('gift_logs')
         .select('*')
@@ -636,17 +572,7 @@ export default function App() {
       
       setGiftLogs(logs || []);
 
-      // ポイントを更新（送った贈り物: +10ポイント）
-      // ポイント更新が失敗しても、贈り物の記録は成功しているので、エラーを表示するが処理は続行
-      try {
-        await updateUserStats(10);
-      } catch (statsError: any) {
-        // ポイント更新のエラーは updateUserStats 内で処理されているので、
-        // ここではログのみ出力
-        console.warn('ポイント更新でエラーが発生しましたが、贈り物の記録は成功しています:', statsError);
-      }
-
-      // total_xxxカラムを更新
+      // total_xxxカラムとポイントを冪等的に更新
       await updateUserStatsCounts();
 
       toast.success('贈り物を記録しました', {
@@ -754,19 +680,6 @@ export default function App() {
     try {
       const supabase = createClient();
       
-      // 削除前にレコード情報を取得（ポイント減算のため）
-      const { data: recordToDelete } = await supabase
-        .from('gift_logs')
-        .select('type, return_status')
-        .eq('id', id)
-        .eq('user_id', currentUserId)
-        .single();
-
-      if (!recordToDelete) {
-        toast.error('削除対象の記録が見つかりません');
-        return;
-      }
-
       const { error } = await supabase
         .from('gift_logs')
         .update({
@@ -783,33 +696,6 @@ export default function App() {
         return;
       }
 
-      // ポイントを減算
-      let pointsToSubtract = 0;
-      const isReceived = recordToDelete.type === 'received' || recordToDelete.type === '受け取ったもの';
-      
-      if (isReceived) {
-        // 受け取った贈り物: -5ポイント
-        pointsToSubtract = 5;
-        // お返し済みの場合、お返しのポイントも減算: -3ポイント
-        if (recordToDelete.return_status) {
-          pointsToSubtract += 3;
-        }
-      } else {
-        // 送った贈り物: -10ポイント
-        pointsToSubtract = 10;
-        // お返しを受け取り済みの場合、お返し受け取りのポイントも減算: -5ポイント
-        if (recordToDelete.return_status) {
-          pointsToSubtract += 5;
-        }
-      }
-
-      // ポイントを更新（負の値を渡すことで減算）
-      try {
-        await updateUserStats(-pointsToSubtract);
-      } catch (statsError: any) {
-        console.warn('ポイント更新でエラーが発生しましたが、記録の削除は成功しています:', statsError);
-      }
-
       // リストを再読み込み
       const { data: logs } = await supabase
         .from('gift_logs')
@@ -820,7 +706,7 @@ export default function App() {
 
       setGiftLogs(logs || []);
       
-      // total_xxxカラムを更新
+      // total_xxxカラムとポイントを冪等的に更新
       await updateUserStatsCounts();
 
       toast.success('記録を削除しました');
@@ -891,19 +777,6 @@ export default function App() {
     try {
       const supabase = createClient();
       
-      // 削除前にレコード情報を取得（ポイント減算のため）
-      const { data: recordToUpdate } = await supabase
-        .from('gift_logs')
-        .select('type')
-        .eq('id', id)
-        .eq('user_id', currentUserId)
-        .single();
-
-      if (!recordToUpdate) {
-        toast.error('更新対象の記録が見つかりません');
-        return;
-      }
-
       const { error } = await supabase
         .from('gift_logs')
         .update({
@@ -924,25 +797,6 @@ export default function App() {
         return;
       }
 
-      // ポイントを減算
-      const isReceived = recordToUpdate.type === 'received' || recordToUpdate.type === '受け取ったもの';
-      let pointsToSubtract = 0;
-      
-      if (isReceived) {
-        // 受け取った贈り物のお返し: -3ポイント
-        pointsToSubtract = 3;
-      } else {
-        // 送った贈り物のお返し受け取り: -5ポイント
-        pointsToSubtract = 5;
-      }
-
-      // ポイントを更新（負の値を渡すことで減算）
-      try {
-        await updateUserStats(-pointsToSubtract);
-      } catch (statsError: any) {
-        console.warn('ポイント更新でエラーが発生しましたが、お返し記録の削除は成功しています:', statsError);
-      }
-
       // リストを再読み込み
       const { data: logs } = await supabase
         .from('gift_logs')
@@ -953,7 +807,7 @@ export default function App() {
 
       setGiftLogs(logs || []);
       
-      // total_xxxカラムを更新
+      // total_xxxカラムとポイントを冪等的に更新
       await updateUserStatsCounts();
 
       toast.success('お返しの記録を削除しました');
@@ -1296,9 +1150,6 @@ export default function App() {
 
                                           if (error) throw error;
 
-                                          // ポイントを更新（受け取った贈り物のお返し: +3ポイント）
-                                          await updateUserStats(3);
-
                                           // リストを再読み込み
                                           const { data } = await supabase
                                             .from('gift_logs')
@@ -1309,7 +1160,7 @@ export default function App() {
                                           
                                           setGiftLogs(data || []);
                                           
-                                          // total_xxxカラムを更新
+                                          // total_xxxカラムとポイントを冪等的に更新
                                           await updateUserStatsCounts();
                                           
                                           setExpandedLogId(null);
@@ -1626,9 +1477,6 @@ export default function App() {
 
                                           if (error) throw error;
 
-                                          // ポイントを更新（送った贈り物のお返し受け取り: +5ポイント）
-                                          await updateUserStats(5);
-
                                           // リストを再読み込み
                                           const { data } = await supabase
                                             .from('gift_logs')
@@ -1639,7 +1487,7 @@ export default function App() {
                                           
                                           setGiftLogs(data || []);
                                           
-                                          // total_xxxカラムを更新
+                                          // total_xxxカラムとポイントを冪等的に更新
                                           await updateUserStatsCounts();
                                           
                                           setExpandedLogId(null);

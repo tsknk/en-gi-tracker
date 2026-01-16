@@ -55,7 +55,7 @@ export function EngiMeter({ points, currentTitle }: EngiMeterProps) {
           <div className="space-y-2 text-sm text-gray-700">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-rose-400"></div>
-              <span>いただいた贈り物を記録：<strong className="text-rose-600">+5ポイント</strong></span>
+              <span>いただいた贈り物を記録：<strong className="text-rose-600">+3ポイント</strong></span>
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-blue-400"></div>
@@ -63,7 +63,11 @@ export function EngiMeter({ points, currentTitle }: EngiMeterProps) {
             </div>
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-400"></div>
-              <span>お返しを記録：<strong className="text-green-600">+3ポイント</strong></span>
+              <span>いただいた贈り物のお返しを記録：<strong className="text-green-600">+5ポイント</strong></span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+              <span>お渡しした贈り物のお返し受け取りを記録：<strong className="text-emerald-600">+3ポイント</strong></span>
             </div>
           </div>
           <p className="text-xs text-gray-600 mt-3 pt-3 border-t border-purple-200">
