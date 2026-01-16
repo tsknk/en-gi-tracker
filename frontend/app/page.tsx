@@ -53,6 +53,8 @@ export default function App() {
   const [deletingRecordId, setDeletingRecordId] = useState<number | null>(null);
   const [editingReturnRecord, setEditingReturnRecord] = useState<GiftLog | null>(null);
   const [deletingReturnRecordId, setDeletingReturnRecordId] = useState<number | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [nickname, setNickname] = useState<string | null>(null);
   
   // 認証ユーザーIDを取得
   useEffect(() => {
@@ -137,7 +139,7 @@ export default function App() {
     }
   };
 
-  // Fetch user stats (points, title) from database
+  // Fetch user stats (points, title, avatar_url, nickname) from database
   const fetchUserStats = async () => {
     if (!currentUserId) {
       return;
@@ -147,7 +149,7 @@ export default function App() {
       const supabase = createClient();
       const { data, error } = await supabase
         .from('user_stats')
-        .select('points, title')
+        .select('points, title, avatar_url, nickname')
         .eq('user_id', currentUserId)
         .single();
 
@@ -161,6 +163,8 @@ export default function App() {
               user_id: currentUserId,
               points: 0,
               title: null,
+              avatar_url: null,
+              nickname: null,
             });
           if (insertError) {
             // 外部キー制約違反の場合は、エラーログを出力せずに初期値を設定
@@ -173,10 +177,14 @@ export default function App() {
             // 作成に失敗しても初期値を設定
             setPoints(0);
             setCurrentTitle('');
+            setAvatarUrl(null);
+            setNickname(null);
             return;
           }
           setPoints(0);
           setCurrentTitle('');
+          setAvatarUrl(null);
+          setNickname(null);
         } else {
           console.error('ユーザーステータス取得エラー詳細:', {
             message: error.message,
@@ -187,10 +195,15 @@ export default function App() {
           // エラーが発生しても初期値を設定
           setPoints(0);
           setCurrentTitle('');
+          setAvatarUrl(null);
+          setNickname(null);
         }
       } else if (data) {
+        console.log('ユーザーステータス取得成功:', data);
         setPoints(data.points || 0);
         setCurrentTitle(data.title || '');
+        setAvatarUrl(data.avatar_url || null);
+        setNickname(data.nickname || null);
       }
     } catch (err: any) {
       console.error('ユーザーステータス取得エラー:', err);
@@ -208,6 +221,8 @@ export default function App() {
       // エラーが発生しても初期値を設定してアプリは動作を続ける
       setPoints(0);
       setCurrentTitle('');
+      setAvatarUrl(null);
+      setNickname(null);
     }
   };
 
@@ -996,6 +1011,10 @@ export default function App() {
           <UserProfile 
             currentTitle={currentTitle}
             points={points}
+            avatarUrl={avatarUrl}
+            nickname={nickname}
+            userId={currentUserId || ''}
+            onUpdate={fetchUserStats}
           />
         </div>
 
