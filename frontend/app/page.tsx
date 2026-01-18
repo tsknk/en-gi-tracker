@@ -1738,7 +1738,7 @@ export default function App() {
 
         {/* 削除確認ダイアログ */}
         <AlertDialog open={deletingRecordId !== null} onOpenChange={(open) => !open && setDeletingRecordId(null)}>
-          <AlertDialogContent overlayClassName="bg-white/95 backdrop-blur-sm">
+          <AlertDialogContent overlayClassName="bg-black/30 backdrop-blur-[4px]">
             <AlertDialogHeader>
               <AlertDialogTitle>削除の確認</AlertDialogTitle>
               <AlertDialogDescription>
@@ -1759,7 +1759,7 @@ export default function App() {
 
         {/* お返し情報削除確認ダイアログ */}
         <AlertDialog open={deletingReturnRecordId !== null} onOpenChange={(open) => !open && setDeletingReturnRecordId(null)}>
-          <AlertDialogContent overlayClassName="bg-white/95 backdrop-blur-sm">
+          <AlertDialogContent overlayClassName="bg-black/30 backdrop-blur-[4px]">
             <AlertDialogHeader>
               <AlertDialogTitle>お返し記録の削除</AlertDialogTitle>
               <AlertDialogDescription>

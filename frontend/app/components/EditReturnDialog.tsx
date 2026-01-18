@@ -83,7 +83,7 @@ export function EditReturnDialog({ isOpen, onClose, record, isReceived, onUpdate
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent 
         className="max-w-2xl max-h-[90vh] overflow-y-auto"
-        overlayClassName="bg-white/95 backdrop-blur-sm"
+        overlayClassName="bg-black/30 backdrop-blur-[4px]"
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
