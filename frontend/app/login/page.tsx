@@ -91,7 +91,7 @@ export default function LoginPage() {
                   });
                   if (resendError) {
                     toast.error('確認メールの再送信に失敗しました', {
-                      description: resendError.message,
+                      description: 'しばらく時間をおいて再度お試しください。',
                     });
                   } else {
                     toast.success('確認メールを再送信しました', {
@@ -105,9 +105,9 @@ export default function LoginPage() {
             },
           });
         } else {
-          // その他のエラーの場合は汎用的なメッセージを表示
+          // その他のエラーの場合は汎用的なメッセージを表示（セキュリティ上の理由で詳細は表示しない）
           toast.error('ログインに失敗しました', {
-            description: error.message || 'メールアドレスまたはパスワードが正しくありません。',
+            description: 'メールアドレスまたはパスワードが正しくありません。',
           });
         }
         setIsLoading(false);
@@ -130,7 +130,7 @@ export default function LoginPage() {
                   });
                   if (resendError) {
                     toast.error('確認メールの再送信に失敗しました', {
-                      description: resendError.message,
+                      description: 'しばらく時間をおいて再度お試しください。',
                     });
                   } else {
                     toast.success('確認メールを再送信しました', {
@@ -155,8 +155,9 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error('ログインエラー:', err);
+      // セキュリティ上の理由で詳細なエラーメッセージは表示しない
       toast.error('ログイン中にエラーが発生しました', {
-        description: err.message || '不明なエラー',
+        description: 'しばらく時間をおいて再度お試しください。',
       });
       setIsLoading(false);
     }

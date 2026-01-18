@@ -125,8 +125,9 @@ export default function App() {
       const supabase = createClient();
       const { error } = await supabase.auth.signOut();
       if (error) {
+        // セキュリティ上の理由で詳細なエラーメッセージは表示しない
         toast.error('ログアウトに失敗しました', {
-          description: error.message,
+          description: 'しばらく時間をおいて再度お試しください。',
         });
         return;
       }
