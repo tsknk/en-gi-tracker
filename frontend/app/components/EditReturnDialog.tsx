@@ -128,9 +128,16 @@ export function EditReturnDialog({ isOpen, onClose, record, isReceived, onUpdate
               <Input
                 id="return_amount"
                 type="number"
+                min="0"
                 placeholder="5000"
                 value={formData.return_amount}
-                onChange={(e) => setFormData({ ...formData, return_amount: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // マイナス値を防ぐ
+                  if (value === '' || parseFloat(value) >= 0 || value === '-') {
+                    setFormData({ ...formData, return_amount: value });
+                  }
+                }}
                 className="border-blue-200"
               />
             </div>

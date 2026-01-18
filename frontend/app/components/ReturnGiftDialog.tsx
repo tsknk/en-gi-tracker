@@ -116,9 +116,16 @@ export function ReturnGiftDialog({ record, onReturn }: ReturnGiftDialogProps) {
             <Input
               id="returnAmount"
               type="number"
+              min="0"
               placeholder="5000"
               value={formData.returnAmount}
-              onChange={(e) => setFormData({ ...formData, returnAmount: e.target.value })}
+              onChange={(e) => {
+                const value = e.target.value;
+                // マイナス値を防ぐ
+                if (value === '' || parseFloat(value) >= 0 || value === '-') {
+                  setFormData({ ...formData, returnAmount: value });
+                }
+              }}
               className="border-green-200"
             />
           </div>

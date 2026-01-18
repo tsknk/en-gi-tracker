@@ -109,9 +109,16 @@ export function ReturnGiftForm({ recordId, onReturn, isReceived = false }: Retur
             <Input
               id={`return-amount-${recordId}`}
               type="number"
+              min="0"
               placeholder="5000"
               value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+              onChange={(e) => {
+                const value = e.target.value;
+                // マイナス値を防ぐ
+                if (value === '' || parseFloat(value) >= 0 || value === '-') {
+                  setFormData({ ...formData, amount: value });
+                }
+              }}
               className="border-green-200 h-8 text-sm"
             />
           </div>

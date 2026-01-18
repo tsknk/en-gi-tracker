@@ -237,9 +237,16 @@ export function EditGiftDialog({ isOpen, onClose, record, onUpdate }: EditGiftDi
               <Input
                 id="amount"
                 type="number"
+                min="0"
                 placeholder="10000"
                 value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  // マイナス値を防ぐ
+                  if (value === '' || parseFloat(value) >= 0 || value === '-') {
+                    setFormData({ ...formData, amount: value });
+                  }
+                }}
                 className="border-blue-200"
               />
             </div>

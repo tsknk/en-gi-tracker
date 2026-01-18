@@ -240,9 +240,16 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
                 <Input
                   id="amount"
                   type="number"
+                  min="0"
                   placeholder="10000"
                   value={giftFormData.amount}
-                  onChange={(e) => setGiftFormData({ ...giftFormData, amount: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // マイナス値を防ぐ
+                    if (value === '' || parseFloat(value) >= 0 || value === '-') {
+                      setGiftFormData({ ...giftFormData, amount: value });
+                    }
+                  }}
                   className="border-blue-200"
                 />
               </div>
@@ -337,9 +344,16 @@ export function UnifiedRecordForm({ onSubmitReceived, onSubmitSent }: UnifiedRec
                 <Input
                   id="amount"
                   type="number"
+                  min="0"
                   placeholder="10000"
                   value={giftFormData.amount}
-                  onChange={(e) => setGiftFormData({ ...giftFormData, amount: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    // マイナス値を防ぐ
+                    if (value === '' || parseFloat(value) >= 0 || value === '-') {
+                      setGiftFormData({ ...giftFormData, amount: value });
+                    }
+                  }}
                   className="border-blue-200"
                 />
               </div>
