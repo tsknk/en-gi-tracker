@@ -1,9 +1,11 @@
 "use client";
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { User, Award, Edit, Camera, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from './ui/alert-dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { createClient } from '@/utils/supabase/client';
@@ -19,10 +21,13 @@ interface UserProfileProps {
 }
 
 export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId, onUpdate }: UserProfileProps) {
+  const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [editedNickname, setEditedNickname] = useState(nickname || '');
   const [avatarPreview, setAvatarPreview] = useState<string | null>(avatarUrl || null);
   const [isUploading, setIsUploading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [avatarImageUrl, setAvatarImageUrl] = useState<string | null>(() => {
     if (avatarUrl) {
       const separator = avatarUrl.includes('?') ? '&' : '?';
@@ -245,6 +250,51 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
     }
   };
 
+  const handleDeleteAccount = async () => {
+    try {
+      setIsDeleting(true);
+      
+      // 現在のセッションを取得
+      const supabase = createClient();
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !session) {
+        throw new Error('セッションの取得に失敗しました');
+      }
+
+      // API Routeを呼び出してアカウントを削除
+      const response = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'アカウントの削除に失敗しました');
+      }
+
+      // セッションをクリア（非同期で実行、完了を待たない）
+      supabase.auth.signOut().catch(console.error);
+
+      // トーストとリダイレクトをすぐに実行
+      toast.success('アカウントを削除しました');
+      
+      // ログインページに即座にリダイレクト（replaceを使用して履歴を置き換え）
+      router.replace('/login');
+    } catch (error: any) {
+      console.error('退会処理エラー:', error);
+      toast.error('退会処理に失敗しました', {
+        description: error.message || '不明なエラーが発生しました',
+      });
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <>
       <motion.div
@@ -397,24 +447,60 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:ml-auto">
+              <Button
+                variant="outline"
+                onClick={handleCancel}
+                disabled={isUploading}
+                className="w-full sm:w-auto"
+              >
+                キャンセル
+              </Button>
+              <Button
+                onClick={handleSave}
+                disabled={isUploading}
+                className="bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700 w-full sm:w-auto"
+              >
+                {isUploading ? '保存中...' : '保存'}
+              </Button>
+            </div>
             <Button
               variant="outline"
-              onClick={handleCancel}
+              onClick={() => setShowDeleteConfirm(true)}
               disabled={isUploading}
+              className="w-full sm:w-auto border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
             >
-              キャンセル
-            </Button>
-            <Button
-              onClick={handleSave}
-              disabled={isUploading}
-              className="bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-700 hover:to-pink-700"
-            >
-              {isUploading ? '保存中...' : '保存'}
+              退会する
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 退会確認ダイアログ */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent 
+          className="bg-white"
+          overlayClassName="bg-black/70 backdrop-blur-sm"
+        >
+          <AlertDialogHeader>
+            <AlertDialogTitle>退会の確認</AlertDialogTitle>
+            <AlertDialogDescription>
+              本当に退会しますか？すべての記録が完全に削除され、復元できません。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>キャンセル</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAccount}
+              disabled={isDeleting}
+              className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isDeleting ? '処理中...' : '退会する'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

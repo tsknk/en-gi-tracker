@@ -171,8 +171,12 @@ export default function App() {
             if (insertError.code === '23503') {
               console.warn('user_statsの作成をスキップしました（外部キー制約違反）');
             } else {
-              console.error('ユーザーステータス作成エラー詳細:', insertError);
-              console.error('エラーオブジェクト全体:', JSON.stringify(insertError, null, 2));
+              console.error('ユーザーステータス作成エラー詳細:', {
+                message: insertError.message,
+                details: insertError.details,
+                hint: insertError.hint,
+                code: insertError.code,
+              });
             }
             // 作成に失敗しても初期値を設定
             setPoints(0);
