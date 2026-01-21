@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { createS3Client, getS3BucketName } from '@/utils/s3/client';
+import { ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3';
 
 /**
  * 退会処理API Route
@@ -70,6 +72,59 @@ export async function POST(request: NextRequest) {
         { error: '不正なリクエストです' },
         { status: 403 }
       );
+    }
+
+    // S3からユーザーのアバター画像を削除
+    try {
+      const s3Client = createS3Client();
+      const bucketName = getS3BucketName();
+      const prefix = `avatars/${userId}/`;
+
+      // ユーザーのアバター画像一覧を取得（ページネーション対応）
+      const objectsToDelete: Array<{ Key: string }> = [];
+      let continuationToken: string | undefined;
+
+      do {
+        const listCommand = new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: prefix,
+          ContinuationToken: continuationToken,
+        });
+
+        const listResponse = await s3Client.send(listCommand);
+
+        if (listResponse.Contents && listResponse.Contents.length > 0) {
+          objectsToDelete.push(
+            ...listResponse.Contents.map((obj) => ({
+              Key: obj.Key!,
+            }))
+          );
+        }
+
+        continuationToken = listResponse.NextContinuationToken;
+      } while (continuationToken);
+
+      // オブジェクトが存在する場合、削除を実行
+      if (objectsToDelete.length > 0) {
+        // 1000件を超える場合は分割して削除（S3のDeleteObjectsは最大1000件まで）
+        const batchSize = 1000;
+        for (let i = 0; i < objectsToDelete.length; i += batchSize) {
+          const batch = objectsToDelete.slice(i, i + batchSize);
+          const deleteCommand = new DeleteObjectsCommand({
+            Bucket: bucketName,
+            Delete: {
+              Objects: batch,
+            },
+          });
+
+          await s3Client.send(deleteCommand);
+        }
+
+        console.log(`ユーザー ${userId} のアバター画像 ${objectsToDelete.length} 件を削除しました`);
+      }
+    } catch (s3Error: any) {
+      // S3の削除エラーはログに記録するが、退会処理は続行する
+      console.error('S3画像削除エラー（退会処理は続行）:', s3Error);
     }
 
     // Admin Clientを使用してユーザーを削除
