@@ -7,7 +7,7 @@ WORKDIR /app
 
 # package.jsonをコピーして依存関係をインストール
 COPY package.json package-lock.json* ./
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # ============================================
 # ビルドステージ

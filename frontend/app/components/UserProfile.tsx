@@ -125,19 +125,28 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
       if (!avatarPreview && avatarUrl && !file) {
         console.log('画像削除処理を開始');
         try {
-          // avatarUrlからパスを抽出（例: https://xxx.supabase.co/storage/v1/object/public/avatars/user_id/filename）
-          const urlParts = avatarUrl.split('/');
-          const avatarsIndex = urlParts.findIndex(part => part === 'avatars');
-          if (avatarsIndex !== -1 && urlParts.length > avatarsIndex + 1) {
-            const oldPath = urlParts.slice(avatarsIndex + 1).join('/');
-            console.log('ストレージから削除するパス:', oldPath);
-            const { error: removeError } = await supabase.storage.from('avatars').remove([oldPath]);
-            if (removeError) {
-              console.error('ストレージからの削除エラー:', removeError);
-              throw removeError;
-            }
-            console.log('ストレージからの削除成功');
+          // セッションからアクセストークンを取得
+          const { data: { session } } = await supabase.auth.getSession();
+          if (!session) {
+            throw new Error('認証セッションがありません');
           }
+
+          // S3から削除
+          const response = await fetch('/api/delete-avatar', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session.access_token}`,
+            },
+            body: JSON.stringify({ url: avatarUrl }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete avatar');
+          }
+
+          console.log('S3からの削除成功');
         } catch (err) {
           console.error('画像削除エラー:', err);
           toast.error('画像の削除に失敗しました', {
@@ -151,12 +160,25 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
         // 古い画像を削除（存在する場合）
         if (avatarUrl) {
           try {
-            // avatarUrlからパスを抽出（例: https://xxx.supabase.co/storage/v1/object/public/avatars/user_id/filename）
-            const urlParts = avatarUrl.split('/');
-            const avatarsIndex = urlParts.findIndex(part => part === 'avatars');
-            if (avatarsIndex !== -1 && urlParts.length > avatarsIndex + 1) {
-              const oldPath = urlParts.slice(avatarsIndex + 1).join('/');
-              await supabase.storage.from('avatars').remove([oldPath]);
+            // セッションからアクセストークンを取得
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+              console.warn('認証セッションがありません。画像削除をスキップします。');
+            } else {
+              // S3から削除
+              const response = await fetch('/api/delete-avatar', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${session.access_token}`,
+                },
+                body: JSON.stringify({ url: avatarUrl }),
+              });
+
+              if (!response.ok) {
+                // 削除に失敗しても続行（新しい画像のアップロードは続ける）
+                console.warn('古い画像の削除に失敗しました');
+              }
             }
           } catch (err) {
             // 削除に失敗しても続行（新しい画像のアップロードは続ける）
@@ -164,28 +186,32 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
           }
         }
 
-        // 新しい画像をアップロード
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${userId}/${Date.now()}.${fileExt}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, file, {
-            cacheControl: '3600',
-            upsert: false,
-          });
-
-        if (uploadError) {
-          throw uploadError;
+        // 新しい画像をS3にアップロード
+        // セッションからアクセストークンを取得
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          throw new Error('認証セッションがありません');
         }
 
-        // 公開URLを取得
-        const { data: { publicUrl } } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(fileName);
-        
-        console.log('画像アップロード成功:', { fileName, publicUrl });
-        finalAvatarUrl = publicUrl;
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch('/api/upload-avatar', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to upload avatar');
+        }
+
+        const data = await response.json();
+        console.log('画像アップロード成功:', { url: data.url });
+        finalAvatarUrl = data.url;
       }
 
       // user_statsを更新
