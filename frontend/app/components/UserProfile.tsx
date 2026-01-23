@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Award, Edit, Camera, X } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { createClient } from '@/utils/supabase/client';
+import { getThumbnailUrlFromAvatarUrl } from '@/utils/s3/client';
 import { toast } from 'sonner';
 
 interface UserProfileProps {
@@ -35,27 +36,124 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
     }
     return null;
   });
+  const [isWaitingForThumbnail, setIsWaitingForThumbnail] = useState(false);
+  const [thumbnailRetryCount, setThumbnailRetryCount] = useState(0);
+
+  /**
+   * サムネイル画像の生成を待つ（リトライ付き）
+   * @param thumbnailUrl サムネイル画像のURL
+   * @param retryCount 現在のリトライ回数
+   * @returns 画像が見つかったかどうか
+   */
+  const waitForThumbnail = useCallback(async (thumbnailUrl: string, retryCount: number): Promise<boolean> => {
+    const MAX_RETRIES = 10; // 最大10回リトライ（約30秒）
+    const RETRY_DELAY = 3000; // 3秒ごとにリトライ
+
+    if (retryCount >= MAX_RETRIES) {
+      console.log('サムネイル画像の生成待機がタイムアウトしました');
+      return false;
+    }
+
+    try {
+      // 画像の存在確認（HEADリクエストではなく、画像の読み込みを試みる）
+      const img = new Image();
+      const loadPromise = new Promise<boolean>((resolve) => {
+        img.onload = () => {
+          console.log(`サムネイル画像が見つかりました（リトライ回数: ${retryCount}）`);
+          resolve(true);
+        };
+        img.onerror = () => {
+          console.log(`サムネイル画像が見つかりませんでした（リトライ回数: ${retryCount}）`);
+          resolve(false);
+        };
+        // タイムアウトを設定（5秒）
+        setTimeout(() => {
+          resolve(false);
+        }, 5000);
+      });
+
+      // タイムスタンプを付けてキャッシュを回避
+      const separator = thumbnailUrl.includes('?') ? '&' : '?';
+      img.src = `${thumbnailUrl}${separator}t=${Date.now()}`;
+
+      const exists = await loadPromise;
+
+      if (exists) {
+        return true;
+      }
+
+      // 画像が見つからない場合は、少し待ってからリトライ
+      setThumbnailRetryCount(retryCount + 1);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+      return waitForThumbnail(thumbnailUrl, retryCount + 1);
+    } catch (error) {
+      console.error('サムネイル画像の確認中にエラーが発生しました:', error);
+      // エラーが発生した場合もリトライ
+      if (retryCount < MAX_RETRIES) {
+        setThumbnailRetryCount(retryCount + 1);
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
+        return waitForThumbnail(thumbnailUrl, retryCount + 1);
+      }
+      return false;
+    }
+  }, []);
 
   // avatarUrlやnicknameが変更されたときにローカル状態を更新（編集ダイアログが閉じているときのみ）
   useEffect(() => {
     if (!isEditing) {
       console.log('avatarUrl/nickname更新:', { avatarUrl, nickname });
       setEditedNickname(nickname || '');
-      setAvatarPreview(avatarUrl || null);
-      // avatarUrlが変更されたときに、タイムスタンプ付きURLを生成
+      // avatarPreviewは編集ダイアログ内で使用するため、サムネイルURLを優先
       if (avatarUrl) {
-        const separator = avatarUrl.includes('?') ? '&' : '?';
-        setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+        const thumbnailUrl = getThumbnailUrlFromAvatarUrl(avatarUrl);
+        setAvatarPreview(thumbnailUrl || avatarUrl);
+      } else {
+        setAvatarPreview(null);
+      }
+      // avatarUrlが変更されたときに、サムネイルURLを優先的に試みる
+      if (avatarUrl) {
+        const thumbnailUrl = getThumbnailUrlFromAvatarUrl(avatarUrl);
+        // 既にサムネイルURLの場合はそのまま使用
+        if (thumbnailUrl === avatarUrl) {
+          const separator = avatarUrl.includes('?') ? '&' : '?';
+          setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+        } else if (thumbnailUrl) {
+          // サムネイルURLが生成できた場合は、存在確認を試みる
+          setIsWaitingForThumbnail(true);
+          waitForThumbnail(thumbnailUrl, 0).then((success) => {
+            if (success) {
+              console.log('既存のサムネイル画像を確認');
+              const separator = thumbnailUrl.includes('?') ? '&' : '?';
+              setAvatarImageUrl(`${thumbnailUrl}${separator}t=${Date.now()}`);
+            } else {
+              console.log('サムネイル画像が見つかりませんでした。元の画像を試します');
+              // サムネイルが見つからない場合は元の画像を試す
+              const separator = avatarUrl.includes('?') ? '&' : '?';
+              setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+            }
+            setIsWaitingForThumbnail(false);
+          });
+        } else {
+          // サムネイルURLが生成できない場合は元のURLを使用
+          const separator = avatarUrl.includes('?') ? '&' : '?';
+          setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+        }
       } else {
         setAvatarImageUrl(null);
       }
     }
-  }, [avatarUrl, nickname, isEditing]);
+  }, [avatarUrl, nickname, isEditing, waitForThumbnail]);
 
   // 編集ダイアログを開く処理
   const handleOpenEdit = () => {
     setEditedNickname(nickname || '');
-    setAvatarPreview(avatarUrl || null);
+    // avatarPreviewは編集ダイアログ内で使用するため、サムネイルURLを優先
+    if (avatarUrl) {
+      const thumbnailUrl = getThumbnailUrlFromAvatarUrl(avatarUrl);
+      setAvatarPreview(thumbnailUrl || avatarUrl);
+    } else {
+      setAvatarPreview(null);
+    }
     setIsEditing(true);
   };
 
@@ -210,21 +308,56 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
         }
 
         const data = await response.json();
-        console.log('画像アップロード成功:', { url: data.url });
+        console.log('画像アップロード成功:', { url: data.url, key: data.key });
         finalAvatarUrl = data.url;
+
+        // サムネイルURLを生成してリトライロジックを開始
+        if (data.url) {
+          const thumbnailUrl = getThumbnailUrlFromAvatarUrl(data.url);
+          if (thumbnailUrl) {
+            console.log('サムネイルURLを生成:', thumbnailUrl);
+            
+            // サムネイル画像の生成を待つ（リトライ付き）
+            setIsWaitingForThumbnail(true);
+            setThumbnailRetryCount(0);
+            
+            // バックグラウンドでサムネイルの生成を待つ
+            waitForThumbnail(thumbnailUrl, 0).then((success) => {
+              if (success) {
+                console.log('サムネイル画像の生成を確認');
+                // サムネイルURLを表示用に設定
+                const separator = thumbnailUrl.includes('?') ? '&' : '?';
+                setAvatarImageUrl(`${thumbnailUrl}${separator}t=${Date.now()}`);
+              } else {
+                console.log('サムネイル画像の生成を確認できませんでした。元の画像を表示します');
+                // タイムアウトした場合は元の画像を表示
+                const separator = finalAvatarUrl.includes('?') ? '&' : '?';
+                setAvatarImageUrl(`${finalAvatarUrl}${separator}t=${Date.now()}`);
+              }
+              setIsWaitingForThumbnail(false);
+            });
+          }
+        }
       }
 
       // user_statsを更新
-      const { error: updateError } = await supabase
+      const { error: updateError, data: updateData } = await supabase
         .from('user_stats')
         .update({
           nickname: editedNickname || null,
           avatar_url: finalAvatarUrl || null,
         })
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .select();
 
       if (updateError) {
-        throw updateError;
+        console.error('Supabase更新エラー詳細:', {
+          message: updateError.message,
+          details: updateError.details,
+          hint: updateError.hint,
+          code: updateError.code,
+        });
+        throw new Error(updateError.message || 'プロフィールの更新に失敗しました');
       }
 
       console.log('プロフィール更新成功:', { nickname: editedNickname, avatar_url: finalAvatarUrl });
@@ -254,8 +387,14 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
       }
     } catch (error: any) {
       console.error('プロフィール更新エラー:', error);
+      const errorMessage = error?.message || error?.toString() || '不明なエラーが発生しました';
+      console.error('エラー詳細:', {
+        error,
+        message: errorMessage,
+        stack: error?.stack,
+      });
       toast.error('プロフィールの更新に失敗しました', {
-        description: error.message,
+        description: errorMessage,
       });
     } finally {
       setIsUploading(false);
@@ -353,7 +492,15 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
                   key={avatarImageUrl}
                   onError={(e) => {
                     console.error('画像読み込みエラー:', avatarImageUrl);
-                    e.currentTarget.style.display = 'none';
+                    // サムネイルURLの読み込みに失敗した場合、元の画像URLを試す
+                    if (avatarUrl && avatarImageUrl.includes('thumbnails/')) {
+                      console.log('サムネイル読み込み失敗。元の画像を試します:', avatarUrl);
+                      const separator = avatarUrl.includes('?') ? '&' : '?';
+                      setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+                    } else {
+                      // 元の画像も読み込めない場合は、フォールバックを表示
+                      e.currentTarget.style.display = 'none';
+                    }
                   }}
                   onLoad={() => {
                     console.log('画像読み込み成功:', avatarImageUrl);
@@ -361,9 +508,21 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
                 />
               ) : null}
               <AvatarFallback className="bg-gradient-to-br from-purple-400 to-pink-400">
-                <User className="size-8 text-white" />
+                {isWaitingForThumbnail ? (
+                  <div className="flex flex-col items-center justify-center gap-1">
+                    <div className="size-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-white">生成中...</span>
+                  </div>
+                ) : (
+                  <User className="size-8 text-white" />
+                )}
               </AvatarFallback>
             </Avatar>
+            {isWaitingForThumbnail && (
+              <div className="absolute -bottom-1 -right-1 bg-blue-500 text-white text-xs px-2 py-1 rounded-full shadow-lg animate-pulse">
+                サムネイル生成中...
+              </div>
+            )}
           </motion.div>
 
           {/* User Info */}
