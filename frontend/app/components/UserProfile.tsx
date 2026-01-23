@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Award, Edit, Camera, X } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -38,16 +38,45 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
   });
   const [isWaitingForThumbnail, setIsWaitingForThumbnail] = useState(false);
   const [thumbnailRetryCount, setThumbnailRetryCount] = useState(0);
+  
+  // コンポーネントのマウント状態を追跡（メモリリークを防ぐため）
+  const isMountedRef = useRef(true);
+  // 進行中のサムネイル待機処理を追跡（キャンセル用）
+  const thumbnailAbortControllerRef = useRef<AbortController | null>(null);
+
+  // コンポーネントのマウント/アンマウント時にフラグを更新
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      // アンマウント時に進行中の処理をキャンセル
+      if (thumbnailAbortControllerRef.current) {
+        thumbnailAbortControllerRef.current.abort();
+        thumbnailAbortControllerRef.current = null;
+      }
+    };
+  }, []);
 
   /**
-   * サムネイル画像の生成を待つ（リトライ付き）
+   * サムネイル画像の生成を待つ（リトライ付き、キャンセル可能）
    * @param thumbnailUrl サムネイル画像のURL
    * @param retryCount 現在のリトライ回数
+   * @param abortSignal キャンセル用のAbortSignal
    * @returns 画像が見つかったかどうか
    */
-  const waitForThumbnail = useCallback(async (thumbnailUrl: string, retryCount: number): Promise<boolean> => {
+  const waitForThumbnail = useCallback(async (
+    thumbnailUrl: string, 
+    retryCount: number,
+    abortSignal?: AbortSignal
+  ): Promise<boolean> => {
     const MAX_RETRIES = 10; // 最大10回リトライ（約30秒）
     const RETRY_DELAY = 3000; // 3秒ごとにリトライ
+
+    // キャンセルされた場合は即座に終了
+    if (abortSignal?.aborted || !isMountedRef.current) {
+      console.log('サムネイル待機がキャンセルされました');
+      return false;
+    }
 
     if (retryCount >= MAX_RETRIES) {
       console.log('サムネイル画像の生成待機がタイムアウトしました');
@@ -57,17 +86,27 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
     try {
       // 画像の存在確認（HEADリクエストではなく、画像の読み込みを試みる）
       const img = new Image();
+      let timeoutId: NodeJS.Timeout | null = null;
+      
       const loadPromise = new Promise<boolean>((resolve) => {
+        // キャンセルチェック
+        if (abortSignal?.aborted || !isMountedRef.current) {
+          resolve(false);
+          return;
+        }
+
         img.onload = () => {
+          if (timeoutId) clearTimeout(timeoutId);
           console.log(`サムネイル画像が見つかりました（リトライ回数: ${retryCount}）`);
           resolve(true);
         };
         img.onerror = () => {
+          if (timeoutId) clearTimeout(timeoutId);
           console.log(`サムネイル画像が見つかりませんでした（リトライ回数: ${retryCount}）`);
           resolve(false);
         };
         // タイムアウトを設定（5秒）
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           resolve(false);
         }, 5000);
       });
@@ -78,21 +117,73 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
 
       const exists = await loadPromise;
 
+      // キャンセルチェック
+      if (abortSignal?.aborted || !isMountedRef.current) {
+        if (timeoutId) clearTimeout(timeoutId);
+        return false;
+      }
+
       if (exists) {
         return true;
       }
 
       // 画像が見つからない場合は、少し待ってからリトライ
-      setThumbnailRetryCount(retryCount + 1);
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-      return waitForThumbnail(thumbnailUrl, retryCount + 1);
+      if (isMountedRef.current) {
+        setThumbnailRetryCount(retryCount + 1);
+      }
+      
+      // 待機中もキャンセルをチェック
+      await new Promise<void>((resolve) => {
+        const delayTimeoutId = setTimeout(() => {
+          resolve();
+        }, RETRY_DELAY);
+        
+        // キャンセルされた場合は即座に解決
+        if (abortSignal) {
+          abortSignal.addEventListener('abort', () => {
+            clearTimeout(delayTimeoutId);
+            resolve();
+          });
+        }
+      });
+      
+      // リトライ前に再度キャンセルチェック
+      if (abortSignal?.aborted || !isMountedRef.current) {
+        return false;
+      }
+      
+      return waitForThumbnail(thumbnailUrl, retryCount + 1, abortSignal);
     } catch (error) {
+      // キャンセルされた場合はエラーを無視
+      if (abortSignal?.aborted || !isMountedRef.current) {
+        return false;
+      }
+      
       console.error('サムネイル画像の確認中にエラーが発生しました:', error);
       // エラーが発生した場合もリトライ
       if (retryCount < MAX_RETRIES) {
-        setThumbnailRetryCount(retryCount + 1);
-        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-        return waitForThumbnail(thumbnailUrl, retryCount + 1);
+        if (isMountedRef.current) {
+          setThumbnailRetryCount(retryCount + 1);
+        }
+        
+        await new Promise<void>((resolve) => {
+          const delayTimeoutId = setTimeout(() => {
+            resolve();
+          }, RETRY_DELAY);
+          
+          if (abortSignal) {
+            abortSignal.addEventListener('abort', () => {
+              clearTimeout(delayTimeoutId);
+              resolve();
+            });
+          }
+        });
+        
+        if (abortSignal?.aborted || !isMountedRef.current) {
+          return false;
+        }
+        
+        return waitForThumbnail(thumbnailUrl, retryCount + 1, abortSignal);
       }
       return false;
     }
@@ -100,6 +191,15 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
 
   // avatarUrlやnicknameが変更されたときにローカル状態を更新（編集ダイアログが閉じているときのみ）
   useEffect(() => {
+    // 前回の処理をキャンセル
+    if (thumbnailAbortControllerRef.current) {
+      thumbnailAbortControllerRef.current.abort();
+    }
+    
+    // 新しいAbortControllerを作成
+    const abortController = new AbortController();
+    thumbnailAbortControllerRef.current = abortController;
+
     if (!isEditing) {
       console.log('avatarUrl/nickname更新:', { avatarUrl, nickname });
       setEditedNickname(nickname || '');
@@ -116,11 +216,20 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
         // 既にサムネイルURLの場合はそのまま使用
         if (thumbnailUrl === avatarUrl) {
           const separator = avatarUrl.includes('?') ? '&' : '?';
-          setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+          if (isMountedRef.current) {
+            setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+          }
         } else if (thumbnailUrl) {
           // サムネイルURLが生成できた場合は、存在確認を試みる
-          setIsWaitingForThumbnail(true);
-          waitForThumbnail(thumbnailUrl, 0).then((success) => {
+          if (isMountedRef.current) {
+            setIsWaitingForThumbnail(true);
+          }
+          waitForThumbnail(thumbnailUrl, 0, abortController.signal).then((success) => {
+            // コンポーネントがマウントされている場合のみ状態を更新
+            if (!isMountedRef.current || abortController.signal.aborted) {
+              return;
+            }
+            
             if (success) {
               console.log('既存のサムネイル画像を確認');
               const separator = thumbnailUrl.includes('?') ? '&' : '?';
@@ -136,12 +245,24 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
         } else {
           // サムネイルURLが生成できない場合は元のURLを使用
           const separator = avatarUrl.includes('?') ? '&' : '?';
-          setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+          if (isMountedRef.current) {
+            setAvatarImageUrl(`${avatarUrl}${separator}t=${Date.now()}`);
+          }
         }
       } else {
-        setAvatarImageUrl(null);
+        if (isMountedRef.current) {
+          setAvatarImageUrl(null);
+        }
       }
     }
+
+    // クリーンアップ関数：依存関係が変更されたりコンポーネントがアンマウントされたときに実行
+    return () => {
+      abortController.abort();
+      if (thumbnailAbortControllerRef.current === abortController) {
+        thumbnailAbortControllerRef.current = null;
+      }
+    };
   }, [avatarUrl, nickname, isEditing, waitForThumbnail]);
 
   // 編集ダイアログを開く処理
@@ -313,16 +434,33 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
 
         // サムネイルURLを生成してリトライロジックを開始
         if (data.url) {
-          const thumbnailUrl = getThumbnailUrlFromAvatarUrl(data.url);
+          const uploadedUrl = data.url; // クロージャ内で使用するためにローカル変数に保存
+          const thumbnailUrl = getThumbnailUrlFromAvatarUrl(uploadedUrl);
           if (thumbnailUrl) {
             console.log('サムネイルURLを生成:', thumbnailUrl);
             
+            // 前回の処理をキャンセル
+            if (thumbnailAbortControllerRef.current) {
+              thumbnailAbortControllerRef.current.abort();
+            }
+            
+            // 新しいAbortControllerを作成
+            const abortController = new AbortController();
+            thumbnailAbortControllerRef.current = abortController;
+            
             // サムネイル画像の生成を待つ（リトライ付き）
-            setIsWaitingForThumbnail(true);
-            setThumbnailRetryCount(0);
+            if (isMountedRef.current) {
+              setIsWaitingForThumbnail(true);
+              setThumbnailRetryCount(0);
+            }
             
             // バックグラウンドでサムネイルの生成を待つ
-            waitForThumbnail(thumbnailUrl, 0).then((success) => {
+            waitForThumbnail(thumbnailUrl, 0, abortController.signal).then((success) => {
+              // コンポーネントがマウントされている場合のみ状態を更新
+              if (!isMountedRef.current || abortController.signal.aborted) {
+                return;
+              }
+              
               if (success) {
                 console.log('サムネイル画像の生成を確認');
                 // サムネイルURLを表示用に設定
@@ -331,8 +469,8 @@ export function UserProfile({ currentTitle, points, avatarUrl, nickname, userId,
               } else {
                 console.log('サムネイル画像の生成を確認できませんでした。元の画像を表示します');
                 // タイムアウトした場合は元の画像を表示
-                const separator = finalAvatarUrl.includes('?') ? '&' : '?';
-                setAvatarImageUrl(`${finalAvatarUrl}${separator}t=${Date.now()}`);
+                const separator = uploadedUrl.includes('?') ? '&' : '?';
+                setAvatarImageUrl(`${uploadedUrl}${separator}t=${Date.now()}`);
               }
               setIsWaitingForThumbnail(false);
             });
