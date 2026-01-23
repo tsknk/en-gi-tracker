@@ -60,36 +60,107 @@ export async function POST(request: NextRequest) {
 
     // URLからS3キーを抽出
     // 形式: https://[bucket-name].s3.[region].amazonaws.com/avatars/user_id/filename
+    // または: https://[bucket-name].s3.[region].amazonaws.com/thumbnails/avatars/user_id/filename
     const urlParts = url.split('/');
-    const avatarsIndex = urlParts.findIndex(part => part === 'avatars');
+    const avatarsIndex = urlParts.findIndex((part: string) => part === 'avatars');
+    const thumbnailsIndex = urlParts.findIndex((part: string) => part === 'thumbnails');
     
-    if (avatarsIndex === -1) {
+    let key: string;
+    let isThumbnail = false;
+    
+    if (thumbnailsIndex !== -1 && avatarsIndex !== -1 && thumbnailsIndex < avatarsIndex) {
+      // thumbnails/avatars/... の形式
+      key = urlParts.slice(thumbnailsIndex).join('/');
+      isThumbnail = true;
+    } else if (avatarsIndex !== -1) {
+      // avatars/... の形式
+      key = urlParts.slice(avatarsIndex).join('/');
+    } else {
       return NextResponse.json(
         { error: 'Invalid URL format' },
         { status: 400 }
       );
     }
-
-    const key = urlParts.slice(avatarsIndex).join('/');
     
     // セキュリティチェック: ユーザーが自分のアバターのみ削除できるようにする
-    if (!key.startsWith(`avatars/${userId}/`)) {
+    const keyWithoutThumbnail = key.replace(/^thumbnails\//, '');
+    if (!keyWithoutThumbnail.startsWith(`avatars/${userId}/`)) {
       return NextResponse.json(
         { error: 'Unauthorized: You can only delete your own avatar' },
         { status: 403 }
       );
     }
 
-    // S3から削除
+    // S3から削除（サムネイルを削除、元の画像も念のため削除を試みる）
+    // 注意: Lambda関数でサムネイル生成後に元の画像は自動削除されるため、
+    // 通常は元の画像は存在しないが、古いデータやエラーケースに備えて削除を試みる
     const s3Client = createS3Client();
     const bucketName = getS3BucketName();
 
-    const command = new DeleteObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-    });
+    const deletePromises: Promise<void>[] = [];
 
-    await s3Client.send(command);
+    if (isThumbnail) {
+      // サムネイルURLの場合、サムネイルを削除（必須）、元の画像も念のため削除を試みる
+      const thumbnailKey = key;
+      const originalKey = keyWithoutThumbnail;
+      
+      // サムネイルの削除（必須）
+      deletePromises.push(
+        s3Client.send(new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: thumbnailKey,
+        })).then(() => {
+          console.log(`Deleted thumbnail: ${thumbnailKey}`);
+        }).catch((err) => {
+          console.error('Error deleting thumbnail:', thumbnailKey, err);
+        })
+      );
+      
+      // 元の画像の削除（念のため、存在しない場合はエラーを無視）
+      deletePromises.push(
+        s3Client.send(new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: originalKey,
+        })).then(() => {
+          console.log(`Deleted original image: ${originalKey}`);
+        }).catch((err) => {
+          // 元の画像が存在しない場合は正常（Lambdaで既に削除済みの可能性）
+          console.log('Original image not found (likely already deleted by Lambda):', originalKey, err.message);
+        })
+      );
+    } else {
+      // 元の画像URLの場合、サムネイルを削除（必須）、元の画像も念のため削除を試みる
+      const originalKey = key;
+      const thumbnailKey = `thumbnails/${key}`;
+      
+      // サムネイルの削除（必須）
+      deletePromises.push(
+        s3Client.send(new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: thumbnailKey,
+        })).then(() => {
+          console.log(`Deleted thumbnail: ${thumbnailKey}`);
+        }).catch((err) => {
+          console.error('Error deleting thumbnail:', thumbnailKey, err);
+        })
+      );
+      
+      // 元の画像の削除（念のため、存在しない場合はエラーを無視）
+      deletePromises.push(
+        s3Client.send(new DeleteObjectCommand({
+          Bucket: bucketName,
+          Key: originalKey,
+        })).then(() => {
+          console.log(`Deleted original image: ${originalKey}`);
+        }).catch((err) => {
+          // 元の画像が存在しない場合は正常（Lambdaで既に削除済みの可能性）
+          console.log('Original image not found (likely already deleted by Lambda):', originalKey, err.message);
+        })
+      );
+    }
+
+    // 両方の削除を並列実行（エラーが発生しても続行）
+    await Promise.allSettled(deletePromises);
 
     return NextResponse.json({
       success: true,

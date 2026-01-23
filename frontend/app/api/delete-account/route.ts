@@ -74,20 +74,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // S3からユーザーのアバター画像を削除
+    // S3からユーザーのアバター画像を削除（サムネイルを削除、元の画像も念のため削除を試みる）
+    // 注意: Lambda関数でサムネイル生成後に元の画像は自動削除されるため、
+    // 通常は元の画像は存在しないが、古いデータやエラーケースに備えて削除を試みる
     try {
       const s3Client = createS3Client();
       const bucketName = getS3BucketName();
-      const prefix = `avatars/${userId}/`;
+      const avatarsPrefix = `avatars/${userId}/`;
+      const thumbnailsPrefix = `thumbnails/avatars/${userId}/`;
 
-      // ユーザーのアバター画像一覧を取得（ページネーション対応）
+      // 削除対象のオブジェクト一覧を取得（ページネーション対応）
       const objectsToDelete: Array<{ Key: string }> = [];
-      let continuationToken: string | undefined;
 
+      // 元の画像（avatars/）を取得（念のため、通常は存在しない）
+      let continuationToken: string | undefined;
       do {
         const listCommand = new ListObjectsV2Command({
           Bucket: bucketName,
-          Prefix: prefix,
+          Prefix: avatarsPrefix,
+          ContinuationToken: continuationToken,
+        });
+
+        const listResponse = await s3Client.send(listCommand);
+
+        if (listResponse.Contents && listResponse.Contents.length > 0) {
+          objectsToDelete.push(
+            ...listResponse.Contents.map((obj) => ({
+              Key: obj.Key!,
+            }))
+          );
+        }
+
+        continuationToken = listResponse.NextContinuationToken;
+      } while (continuationToken);
+
+      // サムネイル画像（thumbnails/avatars/）を取得
+      continuationToken = undefined;
+      do {
+        const listCommand = new ListObjectsV2Command({
+          Bucket: bucketName,
+          Prefix: thumbnailsPrefix,
           ContinuationToken: continuationToken,
         });
 
@@ -120,7 +146,7 @@ export async function POST(request: NextRequest) {
           await s3Client.send(deleteCommand);
         }
 
-        console.log(`ユーザー ${userId} のアバター画像 ${objectsToDelete.length} 件を削除しました`);
+        console.log(`ユーザー ${userId} のアバター画像（サムネイル+念のため元画像） ${objectsToDelete.length} 件を削除しました`);
       }
     } catch (s3Error: any) {
       // S3の削除エラーはログに記録するが、退会処理は続行する
