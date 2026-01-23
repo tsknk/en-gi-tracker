@@ -112,7 +112,7 @@ export async function POST(request: NextRequest) {
         })).then(() => {
           console.log(`Deleted thumbnail: ${thumbnailKey}`);
         }).catch((err) => {
-          console.error(`Error deleting thumbnail ${thumbnailKey}:`, err);
+          console.error('Error deleting thumbnail:', thumbnailKey, err);
         })
       );
       
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
           console.log(`Deleted original image: ${originalKey}`);
         }).catch((err) => {
           // 元の画像が存在しない場合は正常（Lambdaで既に削除済みの可能性）
-          console.log(`Original image ${originalKey} not found (likely already deleted by Lambda):`, err.message);
+          console.log('Original image not found (likely already deleted by Lambda):', originalKey, err.message);
         })
       );
     } else {
@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
         })).then(() => {
           console.log(`Deleted thumbnail: ${thumbnailKey}`);
         }).catch((err) => {
-          console.error(`Error deleting thumbnail ${thumbnailKey}:`, err);
+          console.error('Error deleting thumbnail:', thumbnailKey, err);
         })
       );
       
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
           console.log(`Deleted original image: ${originalKey}`);
         }).catch((err) => {
           // 元の画像が存在しない場合は正常（Lambdaで既に削除済みの可能性）
-          console.log(`Original image ${originalKey} not found (likely already deleted by Lambda):`, err.message);
+          console.log('Original image not found (likely already deleted by Lambda):', originalKey, err.message);
         })
       );
     }
