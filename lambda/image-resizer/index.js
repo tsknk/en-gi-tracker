@@ -15,9 +15,9 @@ const handler = async (event) => {
     console.log('Received S3 event:', JSON.stringify(event, null, 2));
     // 複数のレコードを処理
     const promises = event.Records.map(async (record) => {
+        const bucket = record.s3.bucket.name;
+        const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
         try {
-            const bucket = record.s3.bucket.name;
-            const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, ' '));
             // thumbnails/フォルダ内のファイルは処理しない（無限ループを防ぐ）
             if (key.startsWith('thumbnails/')) {
                 console.log(`Skipping thumbnail file: ${key}`);
@@ -72,13 +72,22 @@ const handler = async (event) => {
             }
         }
         catch (error) {
-            console.error(`Error processing image:`, error);
-            // エラーが発生しても他の画像の処理は続行
-            throw error;
+            console.error(`Error processing image ${key}:`, error);
+            // エラーが発生しても他の画像の処理は続行（エラーを再スローしない）
+            // エラーはログに記録するだけで、このプロミスは成功として扱う
         }
     });
-    // すべての処理を並列実行
-    await Promise.all(promises);
-    console.log('All images processed successfully');
+    // すべての処理を並列実行（Promise.allSettledを使用して、すべてのプロミスが完了するまで待つ）
+    const results = await Promise.allSettled(promises);
+    // 結果を確認してログに記録
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+    console.log(`Processing completed: ${successful} successful, ${failed} failed`);
+    // エラーがあった場合はログに記録（ただし処理は続行）
+    results.forEach((result, index) => {
+        if (result.status === 'rejected') {
+            console.error(`Failed to process record ${index}:`, result.reason);
+        }
+    });
 };
 exports.handler = handler;
